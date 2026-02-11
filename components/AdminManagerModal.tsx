@@ -27,8 +27,9 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({ isOpen, on
   const fetchUsers = async () => {
     setLoadingList(true);
     try {
+      // Changed table from 'users' to 'users-table-kik'
       const { data, error } = await supabase
-        .from('users')
+        .from('users-table-kik')
         .select('*')
         .order('id', { ascending: true });
 
@@ -63,8 +64,9 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({ isOpen, on
         throw new Error('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       }
 
+      // Changed table from 'users' to 'users-table-kik'
       const { error } = await supabase
-        .from('users')
+        .from('users-table-kik')
         .insert([{ username, password, name }]);
 
       if (error) {

@@ -228,7 +228,7 @@ const App: React.FC = () => {
   const handleLogin = async (username: string, password: string) => {
     try {
         const { data, error } = await supabase
-            .from('users')
+            .from('users-table-kik') // Use the new table name
             .select('*')
             .eq('username', username)
             .eq('password', password)
