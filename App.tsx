@@ -144,26 +144,39 @@ const App: React.FC = () => {
   // Reset Month Action
   const handleResetMonth = async () => {
     if (!isKikOrAdmin) return;
-    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\nข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร`);
+    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\n1. ข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร\n2. สถานะจะถูกเปลี่ยนกลับเป็น "ฉบับร่าง" (Draft) เพื่อให้คุณเริ่มจัดใหม่`);
     if (!confirm) return;
 
     try {
         const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const searchPattern = `${year}-${month}-%`;
+        const monthKey = getMonthKey(currentDate);
 
-        // Delete from DB
-        const { error } = await supabase
+        // 1. Delete assignments
+        const { error: deleteError } = await supabase
             .from('Table-kik')
             .delete()
             .like('date', searchPattern);
 
-        if (error) throw error;
+        if (deleteError) throw deleteError;
 
-        // Clear local state for this month
+        // 2. Unpublish (Set back to draft)
+        const { error: statusError } = await supabase
+            .from('monthly_roster_status')
+            .upsert({ 
+                month_key: monthKey, 
+                is_published: false,
+                published_by: currentUsername
+            });
+
+        if (statusError) throw statusError;
+
+        // Clear local state for this month & Set to Draft
         setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
+        setIsPublished(false);
         
-        alert("ล้างข้อมูลเรียบร้อยแล้ว");
+        alert("ล้างข้อมูลและยกเลิกการประกาศเรียบร้อยแล้ว");
     } catch (e: any) {
         console.error("Reset failed", e);
         alert("เกิดข้อผิดพลาดในการล้างข้อมูล: " + e.message);
@@ -783,25 +796,23 @@ const App: React.FC = () => {
                          {/* Manager Actions - Only Kik/Admin sees this */}
                          {isKikOrAdmin && (
                              <>
-                                {!isPublished && (
-                                    <>
-                                        <button 
-                                            onClick={handleResetMonth}
-                                            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200"
-                                            title="ลบข้อมูลทั้งหมดในเดือนนี้"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                                            ล้างข้อมูล
-                                        </button>
+                                <button 
+                                    onClick={handleResetMonth}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200"
+                                    title="ลบข้อมูลทั้งหมดและยกเลิกประกาศ"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                    ล้างข้อมูล
+                                </button>
 
-                                        <button 
-                                            onClick={handlePublish}
-                                            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                            บันทึกและประกาศ
-                                        </button>
-                                    </>
+                                {!isPublished && (
+                                    <button 
+                                        onClick={handlePublish}
+                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                        บันทึกและประกาศ
+                                    </button>
                                 )}
                                 
                                 <button 
