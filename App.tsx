@@ -44,8 +44,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
+        // ดึงข้อมูลจากตาราง Table-kik
         const { data, error } = await supabase
-          .from('assignments')
+          .from('Table-kik')
           .select('*');
           
         if (error) {
@@ -76,7 +77,8 @@ const App: React.FC = () => {
   // Helper to sync changes to DB
   const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
     try {
-      await supabase.from('assignments').upsert({
+      // บันทึกข้อมูลลงตาราง Table-kik
+      await supabase.from('Table-kik').upsert({
         id: assignment.id,
         staff_id: assignment.staffId,
         date: assignment.date,
@@ -89,7 +91,8 @@ const App: React.FC = () => {
 
   const deleteAssignmentFromDB = async (id: string) => {
     try {
-      await supabase.from('assignments').delete().eq('id', id);
+      // ลบข้อมูลจากตาราง Table-kik
+      await supabase.from('Table-kik').delete().eq('id', id);
     } catch (error) {
       console.error('Error deleting from DB:', error);
     }
