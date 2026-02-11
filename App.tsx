@@ -59,6 +59,14 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn, isKikOrAdmin, isPublished]);
 
+  // Visibility Logic: 
+  // If user is Admin/Kik -> Show everything
+  // If Published -> Show everything
+  // Else (Regular user + Draft mode) -> Show nothing
+  const shouldShowContent = useMemo(() => {
+      return isKikOrAdmin || isPublished;
+  }, [isKikOrAdmin, isPublished]);
+
   // Generate Month Key for DB (e.g., "2024-02")
   const getMonthKey = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -258,14 +266,6 @@ const App: React.FC = () => {
            currentDate.getMonth() === today.getMonth() && 
            currentDate.getFullYear() === today.getFullYear();
   };
-
-  // Visibility Logic: 
-  // If user is Admin/Kik -> Show everything
-  // If Published -> Show everything
-  // Else (Regular user + Draft mode) -> Show nothing
-  const shouldShowContent = useMemo(() => {
-      return isKikOrAdmin || isPublished;
-  }, [isKikOrAdmin, isPublished]);
 
   const getShifts = (staffId: string, day: number): ShiftAssignment[] => {
     if (!shouldShowContent) return []; // Hide if not visible
