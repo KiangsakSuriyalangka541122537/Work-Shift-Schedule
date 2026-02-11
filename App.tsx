@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Staff, ShiftAssignment, ShiftType, SHIFT_CONFIG, CellCoordinate, ShiftHistory, formatDateToISO } from './types';
 import { STAFF_LIST, HOLIDAYS } from './constants';
 import { ShiftStats } from './components/ShiftStats';
@@ -37,6 +37,65 @@ const App: React.FC = () => {
   // Printing
   const printRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  // --- Supabase Integration ---
+
+  // 1. Fetch Assignments on Load or Date Change
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('assignments')
+          .select('*');
+          
+        if (error) {
+          console.error('Error fetching assignments:', error);
+          return;
+        }
+
+        if (data) {
+          // Convert snake_case from DB to camelCase for App
+          const formattedData: ShiftAssignment[] = data.map((item: any) => ({
+            id: item.id,
+            staffId: item.staff_id,
+            date: item.date,
+            shiftType: item.shift_type as ShiftType
+          }));
+          setAssignments(formattedData);
+        }
+      } catch (err) {
+        console.error('Connection error:', err);
+      }
+    };
+
+    fetchAssignments();
+    
+    // Optional: Set up Realtime subscription here if needed
+  }, []); // Run once on mount, or add dependencies if you want to refetch on month change
+
+  // Helper to sync changes to DB
+  const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
+    try {
+      await supabase.from('assignments').upsert({
+        id: assignment.id,
+        staff_id: assignment.staffId,
+        date: assignment.date,
+        shift_type: assignment.shiftType
+      });
+    } catch (error) {
+      console.error('Error saving to DB:', error);
+    }
+  };
+
+  const deleteAssignmentFromDB = async (id: string) => {
+    try {
+      await supabase.from('assignments').delete().eq('id', id);
+    } catch (error) {
+      console.error('Error deleting from DB:', error);
+    }
+  };
+
+  // --- End Supabase Integration ---
 
   // Calendar Helpers
   const daysInMonth = useMemo(() => {
@@ -228,31 +287,37 @@ const App: React.FC = () => {
         return currentAssignments; // Do nothing if already exists
     }
 
+    // Prepare new assignment object
+    const newAssignment = {
+        id: `${staffId}-${dateStr}-${newType}`,
+        staffId,
+        date: dateStr,
+        shiftType: newType
+    };
+
+    // Save to DB
+    saveAssignmentToDB(newAssignment);
+
     // Filter out existing shifts from the main array so we can rebuild
     const otherAssignments = currentAssignments.filter(a => !(a.staffId === staffId && a.date === dateStr));
 
     if (!isSpecialDay) {
-        return [...otherAssignments, {
-            id: `${staffId}-${dateStr}-${newType}`,
-            staffId,
-            date: dateStr,
-            shiftType: newType
-        }];
+        // On normal days, only 1 shift allowed (remove others implicitly by not including them from existingShifts)
+        // We must also delete the old ones from DB
+        existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
+        
+        return [...otherAssignments, newAssignment];
     } else {
         if (existingShifts.length < 2) {
-            return [...otherAssignments, ...existingShifts, {
-                id: `${staffId}-${dateStr}-${newType}`,
-                staffId,
-                date: dateStr,
-                shiftType: newType
-            }];
+            return [...otherAssignments, ...existingShifts, newAssignment];
         } else {
-            return [...otherAssignments, {
-                id: `${staffId}-${dateStr}-${newType}`,
-                staffId,
-                date: dateStr,
-                shiftType: newType
-            }];
+            // If already 2, replace the last one? Or just don't add? 
+            // For simplicity, let's say we replace all with the new one to avoid overflow if logic isn't perfect
+            // Or better, replace the *first* one found or just reset.
+            // Let's reset to just this new one to be safe, or keep the first one.
+            // Current logic: Clear and set new.
+            existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
+            return [...otherAssignments, newAssignment];
         }
     }
   };
@@ -316,34 +381,57 @@ const App: React.FC = () => {
         let nextAssignments = [...prev];
 
         // --- Swap Main Day (D1) ---
-        // Remove specific types from source/target
-        nextAssignments = nextAssignments.filter(a => !(a.staffId === source.staffId && a.date === sourceDateStr && a.shiftType === sourceType));
-        nextAssignments = nextAssignments.filter(a => !(a.staffId === target.staffId && a.date === targetDateStr && a.shiftType === targetType));
-
-        // Add swapped types
+        // Delete original assignments from DB and State
+        if (sourceType !== ShiftType.OFF) {
+            const id = `${source.staffId}-${sourceDateStr}-${sourceType}`;
+            nextAssignments = nextAssignments.filter(a => a.id !== id);
+            deleteAssignmentFromDB(id);
+        }
         if (targetType !== ShiftType.OFF) {
-            nextAssignments.push({ id: `${source.staffId}-${sourceDateStr}-${targetType}`, staffId: source.staffId, date: sourceDateStr, shiftType: targetType });
+            const id = `${target.staffId}-${targetDateStr}-${targetType}`;
+            nextAssignments = nextAssignments.filter(a => a.id !== id);
+            deleteAssignmentFromDB(id);
+        }
+
+        // Add swapped assignments to DB and State
+        if (targetType !== ShiftType.OFF) {
+            const newAssign = { id: `${source.staffId}-${sourceDateStr}-${targetType}`, staffId: source.staffId, date: sourceDateStr, shiftType: targetType };
+            nextAssignments.push(newAssign);
+            saveAssignmentToDB(newAssign);
         }
         if (sourceType !== ShiftType.OFF) {
-            nextAssignments.push({ id: `${target.staffId}-${targetDateStr}-${sourceType}`, staffId: target.staffId, date: targetDateStr, shiftType: sourceType });
+             const newAssign = { id: `${target.staffId}-${targetDateStr}-${sourceType}`, staffId: target.staffId, date: targetDateStr, shiftType: sourceType };
+            nextAssignments.push(newAssign);
+            saveAssignmentToDB(newAssign);
         }
 
         // --- Swap Next Day Night (D2) if Combo ---
         if (swapNight) {
-            // Determine current status of Next Night for both
             const sNextNightType = sourceHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
             const tNextNightType = targetHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
 
             // Remove existing Night shifts from next day
-            nextAssignments = nextAssignments.filter(a => !(a.staffId === source.staffId && a.date === sourceNextDateStr && a.shiftType === ShiftType.NIGHT));
-            nextAssignments = nextAssignments.filter(a => !(a.staffId === target.staffId && a.date === targetNextDateStr && a.shiftType === ShiftType.NIGHT));
+            if (sNextNightType === ShiftType.NIGHT) {
+                 const id = `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`;
+                 nextAssignments = nextAssignments.filter(a => a.id !== id);
+                 deleteAssignmentFromDB(id);
+            }
+            if (tNextNightType === ShiftType.NIGHT) {
+                 const id = `${target.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`;
+                 nextAssignments = nextAssignments.filter(a => a.id !== id);
+                 deleteAssignmentFromDB(id);
+            }
 
             // Apply swapped Night shifts
             if (tNextNightType === ShiftType.NIGHT) {
-                nextAssignments.push({ id: `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: source.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT });
+                const newAssign = { id: `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: source.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT };
+                nextAssignments.push(newAssign);
+                saveAssignmentToDB(newAssign);
             }
             if (sNextNightType === ShiftType.NIGHT) {
-                nextAssignments.push({ id: `${target.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`, staffId: target.staffId, date: targetNextDateStr, shiftType: ShiftType.NIGHT });
+                const newAssign = { id: `${target.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`, staffId: target.staffId, date: targetNextDateStr, shiftType: ShiftType.NIGHT };
+                nextAssignments.push(newAssign);
+                saveAssignmentToDB(newAssign);
             }
         }
 
@@ -366,6 +454,9 @@ const App: React.FC = () => {
 
     // Helper: Remove a specific shift type from ALL users on a specific date
     const removeGlobalShift = (list: ShiftAssignment[], dStr: string, type: ShiftType) => {
+        // Find them first to delete from DB
+        const toRemove = list.filter(a => a.date === dStr && a.shiftType === type);
+        toRemove.forEach(a => deleteAssignmentFromDB(a.id));
         return list.filter(a => !(a.date === dStr && a.shiftType === type));
     };
 
@@ -380,21 +471,31 @@ const App: React.FC = () => {
 
         setAssignments(prev => {
             // 1. Remove all shifts for this day for this user
+            const toDelete = prev.filter(a => a.staffId === staffId && a.date === targetDateStr);
+            toDelete.forEach(a => deleteAssignmentFromDB(a.id));
+            
             let newAssignments = prev.filter(a => !(a.staffId === staffId && a.date === targetDateStr));
 
             // 2. Cascade Delete linked shifts
             currentShifts.forEach(shift => {
                  if (shift.shiftType === ShiftType.AFTERNOON) {
-                    newAssignments = newAssignments.filter(a => 
-                        !(a.staffId === staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT)
-                    );
+                    // Check next night
+                    const linkedNight = newAssignments.find(a => a.staffId === staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
+                    if (linkedNight) {
+                        deleteAssignmentFromDB(linkedNight.id);
+                        newAssignments = newAssignments.filter(a => a.id !== linkedNight.id);
+                    }
                  } else if (shift.shiftType === ShiftType.NIGHT) {
+                    // Check prev afternoon
                     const prevDate = new Date(targetDate);
                     prevDate.setDate(targetDate.getDate() - 1);
                     const prevDateStr = formatDateToISO(prevDate);
-                    newAssignments = newAssignments.filter(a => 
-                        !(a.staffId === staffId && a.date === prevDateStr && a.shiftType === ShiftType.AFTERNOON)
-                    );
+                    
+                    const linkedAfternoon = newAssignments.find(a => a.staffId === staffId && a.date === prevDateStr && a.shiftType === ShiftType.AFTERNOON);
+                    if (linkedAfternoon) {
+                        deleteAssignmentFromDB(linkedAfternoon.id);
+                        newAssignments = newAssignments.filter(a => a.id !== linkedAfternoon.id);
+                    }
                  }
             });
 
