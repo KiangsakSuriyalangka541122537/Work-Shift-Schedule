@@ -133,6 +133,35 @@ const App: React.FC = () => {
     fetchData();
   }, [currentDate]); 
 
+  // Reset Month Action
+  const handleResetMonth = async () => {
+    if (!isKikOrAdmin) return;
+    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\nข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร`);
+    if (!confirm) return;
+
+    try {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const searchPattern = `${year}-${month}-%`;
+
+        // Delete from DB
+        const { error } = await supabase
+            .from('Table-kik')
+            .delete()
+            .like('date', searchPattern);
+
+        if (error) throw error;
+
+        // Clear local state for this month
+        setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
+        
+        alert("ล้างข้อมูลเรียบร้อยแล้ว");
+    } catch (e: any) {
+        console.error("Reset failed", e);
+        alert("เกิดข้อผิดพลาดในการล้างข้อมูล: " + e.message);
+    }
+  };
+
   // Publish Action
   const handlePublish = async () => {
     if (!isKikOrAdmin) return;
@@ -230,7 +259,17 @@ const App: React.FC = () => {
            currentDate.getFullYear() === today.getFullYear();
   };
 
+  // Visibility Logic: 
+  // If user is Admin/Kik -> Show everything
+  // If Published -> Show everything
+  // Else (Regular user + Draft mode) -> Show nothing
+  const shouldShowContent = useMemo(() => {
+      return isKikOrAdmin || isPublished;
+  }, [isKikOrAdmin, isPublished]);
+
   const getShifts = (staffId: string, day: number): ShiftAssignment[] => {
+    if (!shouldShowContent) return []; // Hide if not visible
+
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateStr = formatDateToISO(date);
     return assignments.filter(a => a.staffId === staffId && a.date === dateStr);
@@ -242,6 +281,8 @@ const App: React.FC = () => {
   };
 
   const hasShiftsOnDay = (day: number) => {
+    if (!shouldShowContent) return false; // Hide if not visible
+
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateStr = formatDateToISO(date);
     return assignments.some(a => a.date === dateStr && a.shiftType !== ShiftType.OFF);
@@ -364,7 +405,11 @@ const App: React.FC = () => {
 
     // Permission Check
     if (!canEdit) {
-        alert("ขออภัย: ตารางเวรเดือนนี้ยังอยู่ระหว่างการจัดทำโดยผู้ดูแล (พี่กิ๊ก) \nกรุณารอการประกาศอย่างเป็นทางการ จึงจะสามารถแลกเวรได้");
+        if (!isPublished) {
+            alert("ขออภัย: ตารางเวรเดือนนี้ยังไม่ถูกประกาศ (Draft Mode) \nคุณยังไม่สามารถเห็นหรือแก้ไขข้อมูลได้จนกว่า Admin จะกดประกาศ");
+        } else {
+            alert("คุณไม่มีสิทธิ์แก้ไขข้อมูลในขณะนี้");
+        }
         return;
     }
 
@@ -630,6 +675,9 @@ const App: React.FC = () => {
     const isSpecial = isWeekendOrHoliday(day);
     const isCurrentDay = isToday(day);
     
+    // Check permission for cursor
+    const userCanInteract = isLoggedIn && canEdit;
+
     const order = { [ShiftType.MORNING]: 1, [ShiftType.AFTERNOON]: 2, [ShiftType.NIGHT]: 3, [ShiftType.OFF]: 4 };
     shifts.sort((a, b) => order[a.shiftType] - order[b.shiftType]);
 
@@ -658,7 +706,7 @@ const App: React.FC = () => {
         );
     }
 
-    const cursorClass = isLoggedIn ? (canEdit ? 'cursor-pointer hover:brightness-95' : 'cursor-not-allowed opacity-90') : 'cursor-default';
+    const cursorClass = userCanInteract ? 'cursor-pointer hover:brightness-95' : 'cursor-default opacity-90';
     const swapClass = isSource ? 'ring-2 ring-primary ring-inset z-10 animate-pulse' : '';
     
     let todayClass = isCurrentDay ? 'bg-emerald-50/40' : '';
@@ -706,6 +754,7 @@ const App: React.FC = () => {
   };
 
   const getStaffTotal = (staffId: string) => {
+    if (!shouldShowContent) return 0;
     return assignments.filter(a => a.staffId === staffId && a.shiftType !== ShiftType.OFF).length;
   };
 
@@ -735,13 +784,24 @@ const App: React.FC = () => {
                          {isKikOrAdmin && (
                              <>
                                 {!isPublished && (
-                                    <button 
-                                        onClick={handlePublish}
-                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                        บันทึกและประกาศตารางเวร
-                                    </button>
+                                    <>
+                                        <button 
+                                            onClick={handleResetMonth}
+                                            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200"
+                                            title="ลบข้อมูลทั้งหมดในเดือนนี้"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                            ล้างข้อมูล
+                                        </button>
+
+                                        <button 
+                                            onClick={handlePublish}
+                                            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            บันทึกและประกาศ
+                                        </button>
+                                    </>
                                 )}
                                 
                                 <button 
@@ -826,6 +886,19 @@ const App: React.FC = () => {
 
         <main className="flex-1 flex flex-col min-h-0 relative">
           
+          {/* Draft Mode Notification for Non-Admins */}
+          {!shouldShowContent && (
+             <div className="absolute inset-0 z-10 bg-slate-50/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+                 <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md">
+                     <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M12 18l-3-3"/><path d="M12 18l3-3"/></svg>
+                     </div>
+                     <h3 className="text-xl font-bold text-slate-800 mb-2">ตารางเวรเดือนนี้อยู่ระหว่างการจัดทำ</h3>
+                     <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode) <br/>ข้อมูลจะแสดงเมื่อมีการประกาศอย่างเป็นทางการแล้วเท่านั้น</p>
+                 </div>
+             </div>
+          )}
+
           {isSwapMode && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-lg bg-indigo-900/95 text-white px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-sm flex items-center justify-between animate-in slide-in-from-top-4 border border-indigo-500/50">
                   <div className="flex items-center gap-4">
@@ -857,7 +930,7 @@ const App: React.FC = () => {
                  ) : (
                      <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                         ฉบับร่าง
+                         ฉบับร่าง {isKikOrAdmin ? '(Admin Mode)' : '(รอประกาศ)'}
                      </span>
                  )}
              </div>
@@ -896,7 +969,7 @@ const App: React.FC = () => {
                                       
                                       {isCurrentDay && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 rounded-full mb-0.5">วันนี้</span>}
 
-                                      {!hasWork && !isCurrentDay && (
+                                      {!hasWork && !isCurrentDay && shouldShowContent && (
                                         <div className="absolute top-1 right-1" title="ยังไม่มีการจัดเวรในวันนี้">
                                             <span className="flex h-1.5 w-1.5">
                                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
