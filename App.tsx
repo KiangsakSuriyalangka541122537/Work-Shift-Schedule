@@ -1065,6 +1065,7 @@ const App: React.FC = () => {
             onInitiateSwap={initiateSwapFromModal}
             isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false}
             historyLogs={history}
+            canManageShifts={isKikOrAdmin}
           />
       )}
 
