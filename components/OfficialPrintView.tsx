@@ -130,18 +130,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                 <td></td>
               </tr>
             ))}
-            
-            {/* Fill empty rows to make table look full */}
-            {Array.from({ length: Math.max(0, 12 - staffList.length) }).map((_, idx) => (
-               <tr key={`empty-${idx}`}>
-                 <td>{staffList.length + idx + 1}</td>
-                 <td></td>
-                 {daysArray.map(day => (
-                    <td key={day} style={{backgroundColor: isWeekendOrHoliday(day) ? '#e5e7eb' : 'transparent'}}></td>
-                 ))}
-                 <td></td>
-               </tr>
-            ))}
           </tbody>
       </table>
 

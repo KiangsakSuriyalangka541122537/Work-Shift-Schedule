@@ -9,7 +9,7 @@ import { AdminManagerModal } from './components/AdminManagerModal';
 import { OfficialPrintView } from './components/OfficialPrintView';
 import { supabase } from './supabaseClient';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf'; // Fixed: Changed to default import
+import { jsPDF } from 'jspdf';
 
 const App: React.FC = () => {
   // Auth State
