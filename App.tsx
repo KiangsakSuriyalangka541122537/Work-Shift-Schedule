@@ -61,7 +61,9 @@ const App: React.FC = () => {
           .from('Table-kik')
           .select('*');
           
-        if (shiftError) console.error('Error fetching assignments:', shiftError);
+        if (shiftError) {
+            console.error('Error fetching assignments:', shiftError);
+        }
 
         if (shiftData) {
           const formattedData: ShiftAssignment[] = shiftData.map((item: any) => ({
@@ -123,22 +125,32 @@ const App: React.FC = () => {
   // Helper to sync changes to DB
   const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
     try {
-      await supabase.from('Table-kik').upsert({
+      const { error } = await supabase.from('Table-kik').upsert({
         id: assignment.id,
         staff_id: assignment.staffId,
         date: assignment.date,
         shift_type: assignment.shiftType
       });
+      
+      if (error) {
+        console.error('Error saving to DB:', error);
+        alert(`เกิดข้อผิดพลาดในการบันทึกข้อมูล: ${error.message}`);
+      }
     } catch (error) {
-      console.error('Error saving to DB:', error);
+      console.error('Unexpected error saving to DB:', error);
     }
   };
 
   const deleteAssignmentFromDB = async (id: string) => {
     try {
-      await supabase.from('Table-kik').delete().eq('id', id);
+      const { error } = await supabase.from('Table-kik').delete().eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting from DB:', error);
+        alert(`เกิดข้อผิดพลาดในการลบข้อมูล: ${error.message}`);
+      }
     } catch (error) {
-      console.error('Error deleting from DB:', error);
+      console.error('Unexpected error deleting from DB:', error);
     }
   };
 
