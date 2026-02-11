@@ -42,14 +42,22 @@ const App: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
 
   // --- Helpers ---
-  const isManager = useMemo(() => {
+  const isKikOrAdmin = useMemo(() => {
     return currentUsername === 'kik' || currentUsername === 'admin';
   }, [currentUsername]);
 
   const canEdit = useMemo(() => {
-    // Managers can always edit. Others can edit only if published.
-    return isLoggedIn && (isManager || isPublished);
-  }, [isLoggedIn, isManager, isPublished]);
+    if (!isLoggedIn) return false;
+
+    // เงื่อนไข: 
+    // 1. ถ้าประกาศแล้ว (isPublished = true) -> ทุกคนที่ล็อกอินแก้ไขได้ (เพื่อแลกเวร)
+    // 2. ถ้ายังไม่ประกาศ (Draft) -> เฉพาะ kik หรือ admin เท่านั้นที่แก้ได้
+    if (isPublished) {
+        return true;
+    } else {
+        return isKikOrAdmin;
+    }
+  }, [isLoggedIn, isKikOrAdmin, isPublished]);
 
   // Generate Month Key for DB (e.g., "2024-02")
   const getMonthKey = (date: Date) => {
@@ -127,7 +135,7 @@ const App: React.FC = () => {
 
   // Publish Action
   const handlePublish = async () => {
-    if (!isManager) return;
+    if (!isKikOrAdmin) return;
     const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?\nหลังจากประกาศแล้ว เจ้าหน้าที่ท่านอื่นจะสามารถเข้ามาแก้ไขหรือแลกเปลี่ยนเวรได้");
     if (!confirm) return;
 
@@ -242,6 +250,10 @@ const App: React.FC = () => {
   const getStaffName = (id: string) => STAFF_LIST.find(s => s.id === id)?.name || 'Unknown';
 
   const addHistoryLog = async (targetDate: string, message: string, actionType: ShiftHistory['actionType']) => {
+    // เงื่อนไขสำคัญ: จะเก็บ Log ก็ต่อเมื่อ admin: kik ทำการ "บันทึก/ประกาศ" แล้วเท่านั้น
+    // ถ้ายังเป็น Draft อยู่ ไม่ต้องเก็บ Log การเปลี่ยนแปลง
+    if (!isPublished) return;
+
     const newLog: ShiftHistory = {
         id: Date.now().toString() + Math.random().toString(),
         timestamp: new Date(),
@@ -253,11 +265,6 @@ const App: React.FC = () => {
     // Optimistic Update
     setHistory(prev => [newLog, ...prev]);
 
-    // Save to DB (Persistent Log)
-    // We record logs even if not published, but displaying them is controlled by isPublished
-    // OR we can decide to only record logs if published. 
-    // Usually, admins want to see logs of their edits too, but the request emphasized "Swaps shown after publish".
-    // I will save all logs to DB to be safe, but only render the list if published.
     try {
         const monthKey = getMonthKey(currentDate);
         const { error } = await supabase.from('shift_logs').insert({
@@ -357,7 +364,7 @@ const App: React.FC = () => {
 
     // Permission Check
     if (!canEdit) {
-        alert("ขออภัย: ตารางเวรเดือนนี้ยังไม่ถูกประกาศโดยผู้ดูแล (พี่กิ๊ก) \nคุณยังไม่สามารถแก้ไขข้อมูลได้ในขณะนี้");
+        alert("ขออภัย: ตารางเวรเดือนนี้ยังอยู่ระหว่างการจัดทำโดยผู้ดูแล (พี่กิ๊ก) \nกรุณารอการประกาศอย่างเป็นทางการ จึงจะสามารถแลกเวรได้");
         return;
     }
 
@@ -724,8 +731,8 @@ const App: React.FC = () => {
                <div className="flex items-center gap-2">
                  {isLoggedIn ? (
                     <div className="flex items-center gap-2">
-                         {/* Manager Actions */}
-                         {isManager && (
+                         {/* Manager Actions - Only Kik/Admin sees this */}
+                         {isKikOrAdmin && (
                              <>
                                 {!isPublished && (
                                     <button 
