@@ -1,0 +1,5 @@
+{
+  "name": "Duty Roster Manager",
+  "description": "A comprehensive shift management system allowing users to view, edit, and swap duty schedules in a calendar matrix format, tailored for hospital staff.",
+  "requestFramePermissions": []
+}

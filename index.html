@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ระบบจัดการตารางเวร</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Sarabun', 'sans-serif'],
+            },
+            colors: {
+              primary: '#0e7490', // Cyan 700
+              secondary: '#64748b', // Slate 500
+              morning: '#dbeafe', // Blue 100
+              afternoon: '#ffedd5', // Orange 100
+              night: '#f3e8ff', // Purple 100
+              morningText: '#1e40af', // Blue 800
+              afternoonText: '#9a3412', // Orange 800
+              nightText: '#6b21a8', // Purple 800
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        font-family: 'Sarabun', sans-serif;
+        background-color: #f1f5f9; /* Slate 100 */
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Prevent body scroll, let app container handle it */
+      }
+      
+      /* Custom Scrollbar Styling */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f8fafc; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 5px;
+        border: 2px solid #f8fafc; /* Create padding effect */
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+      ::-webkit-scrollbar-corner {
+        background: #f8fafc;
+      }
+      
+      /* Utility for hiding scrollbar if needed */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.7",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "jspdf": "https://esm.sh/jspdf@2.5.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
