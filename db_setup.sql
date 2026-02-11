@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 -- 2. สร้างตาราง Table-kik (ใน public)
--- ใช้ Double Quotes "Table-kik" เพื่อรักษา Case Sensitive ให้ตรงกับโค้ด React
 CREATE TABLE IF NOT EXISTS public."Table-kik" (
   id text primary key,
   staff_id text not null,
@@ -21,11 +20,19 @@ CREATE TABLE IF NOT EXISTS public."Table-kik" (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- 3. ให้สิทธิ์การใช้งาน (ปกติ public มีให้อยู่แล้ว แต่กันไว้)
+-- 3. สร้างตาราง monthly_roster_status (เก็บสถานะการประกาศตารางเวรรายเดือน)
+CREATE TABLE IF NOT EXISTS public.monthly_roster_status (
+    month_key text primary key, -- รูปแบบ 'YYYY-MM'
+    is_published boolean default false,
+    published_by text,
+    updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 4. ให้สิทธิ์การใช้งาน
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
--- 4. เพิ่มข้อมูลผู้ใช้งานเริ่มต้น
+-- 5. เพิ่มข้อมูลผู้ใช้งานเริ่มต้น
 INSERT INTO public.users (username, password, name, role) VALUES
 ('tor', 'tor', 'พี่ต่อ', 'user'),
 ('kik', 'kik', 'พี่กิ๊ก', 'user'),
@@ -36,11 +43,12 @@ INSERT INTO public.users (username, password, name, role) VALUES
 ('admin', '1234', 'Admin', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
--- 5. เปิดการใช้งาน Row Level Security (RLS)
+-- 6. เปิดการใช้งาน Row Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Table-kik" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.monthly_roster_status ENABLE ROW LEVEL SECURITY;
 
--- 6. ล้าง Policies เก่าทิ้งทั้งหมด (ใน public) เพื่อป้องกัน Error ซ้ำ
+-- 7. ล้าง Policies เก่าทิ้งทั้งหมดป้องกัน Error
 DROP POLICY IF EXISTS "Allow read access for all" ON public.users;
 DROP POLICY IF EXISTS "Allow insert access for all" ON public.users;
 DROP POLICY IF EXISTS "Allow update access for all" ON public.users;
@@ -51,7 +59,9 @@ DROP POLICY IF EXISTS "Allow insert access for all" ON public."Table-kik";
 DROP POLICY IF EXISTS "Allow update access for all" ON public."Table-kik";
 DROP POLICY IF EXISTS "Allow delete access for all" ON public."Table-kik";
 
--- 7. สร้าง Policies ใหม่ (อนุญาตให้ทุกคนอ่าน/เขียนได้)
+DROP POLICY IF EXISTS "Allow all access" ON public.monthly_roster_status;
+
+-- 8. สร้าง Policies ใหม่ (อนุญาตให้ทุกคนอ่าน/เขียนได้เพื่อความสะดวก)
 -- Users Policies
 CREATE POLICY "Allow read access for all" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Allow insert access for all" ON public.users FOR INSERT WITH CHECK (true);
@@ -63,3 +73,6 @@ CREATE POLICY "Allow read access for all" ON public."Table-kik" FOR SELECT USING
 CREATE POLICY "Allow insert access for all" ON public."Table-kik" FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update access for all" ON public."Table-kik" FOR UPDATE USING (true);
 CREATE POLICY "Allow delete access for all" ON public."Table-kik" FOR DELETE USING (true);
+
+-- Monthly Status Policies
+CREATE POLICY "Allow all access" ON public.monthly_roster_status FOR ALL USING (true) WITH CHECK (true);

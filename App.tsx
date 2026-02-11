@@ -15,6 +15,7 @@ const App: React.FC = () => {
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<string>('');
+  const [currentUsername, setCurrentUsername] = useState<string>(''); // Track username for permissions
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAdminManagerOpen, setIsAdminManagerOpen] = useState(false);
 
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date()); // Tracks the month viewing
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([]);
   const [history, setHistory] = useState<ShiftHistory[]>([]);
+  const [isPublished, setIsPublished] = useState(false); // Track if current month is published
   
   // Interaction State
   const [selectedCell, setSelectedCell] = useState<CellCoordinate | null>(null);
@@ -38,26 +40,31 @@ const App: React.FC = () => {
   const printRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
+  // --- Helpers ---
+  const isManager = useMemo(() => {
+    return currentUsername === 'kik' || currentUsername === 'admin';
+  }, [currentUsername]);
+
+  const canEdit = useMemo(() => {
+    // Managers can always edit. Others can edit only if published.
+    return isLoggedIn && (isManager || isPublished);
+  }, [isLoggedIn, isManager, isPublished]);
+
   // --- Supabase Integration ---
 
-  // 1. Fetch Assignments on Load or Date Change
+  // Fetch Assignments and Status on Load or Date Change
   useEffect(() => {
-    const fetchAssignments = async () => {
+    const fetchData = async () => {
       try {
-        // ดึงข้อมูลจากตาราง Table-kik
-        // หมายเหตุ: การใช้ .from('Table-kik') จะส่งชื่อตารางไปตรงๆ
-        const { data, error } = await supabase
+        // 1. Fetch Assignments
+        const { data: shiftData, error: shiftError } = await supabase
           .from('Table-kik')
           .select('*');
           
-        if (error) {
-          console.error('Error fetching assignments:', error);
-          return;
-        }
+        if (shiftError) console.error('Error fetching assignments:', shiftError);
 
-        if (data) {
-          // Convert snake_case from DB to camelCase for App
-          const formattedData: ShiftAssignment[] = data.map((item: any) => ({
+        if (shiftData) {
+          const formattedData: ShiftAssignment[] = shiftData.map((item: any) => ({
             id: item.id,
             staffId: item.staff_id,
             date: item.date,
@@ -65,18 +72,57 @@ const App: React.FC = () => {
           }));
           setAssignments(formattedData);
         }
+
+        // 2. Fetch Publish Status
+        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+        const { data: statusData, error: statusError } = await supabase
+          .from('monthly_roster_status')
+          .select('is_published')
+          .eq('month_key', monthKey)
+          .single();
+
+        if (statusError && statusError.code !== 'PGRST116') { // Ignore "Row not found" error
+            console.error('Error fetching status:', statusError);
+        }
+        
+        setIsPublished(statusData?.is_published || false);
+
       } catch (err) {
         console.error('Connection error:', err);
       }
     };
 
-    fetchAssignments();
-  }, []); 
+    fetchData();
+  }, [currentDate]); 
+
+  // Publish Action
+  const handlePublish = async () => {
+    if (!isManager) return;
+    const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?\nหลังจากประกาศแล้ว เจ้าหน้าที่ท่านอื่นจะสามารถเข้ามาแก้ไขหรือแลกเปลี่ยนเวรได้");
+    if (!confirm) return;
+
+    try {
+        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+        const { error } = await supabase
+            .from('monthly_roster_status')
+            .upsert({ 
+                month_key: monthKey, 
+                is_published: true,
+                published_by: currentUsername
+            });
+
+        if (error) throw error;
+        setIsPublished(true);
+        alert("ประกาศตารางเวรเรียบร้อยแล้ว");
+    } catch (e) {
+        console.error("Publish failed", e);
+        alert("เกิดข้อผิดพลาดในการประกาศตารางเวร");
+    }
+  };
 
   // Helper to sync changes to DB
   const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
     try {
-      // บันทึกข้อมูลลงตาราง Table-kik
       await supabase.from('Table-kik').upsert({
         id: assignment.id,
         staff_id: assignment.staffId,
@@ -90,7 +136,6 @@ const App: React.FC = () => {
 
   const deleteAssignmentFromDB = async (id: string) => {
     try {
-      // ลบข้อมูลจากตาราง Table-kik
       await supabase.from('Table-kik').delete().eq('id', id);
     } catch (error) {
       console.error('Error deleting from DB:', error);
@@ -118,10 +163,7 @@ const App: React.FC = () => {
     const dateStr = formatDateToISO(date);
     const d = date.getDay();
     const isWeekend = d === 0 || d === 6;
-    
-    // Check approximate holiday match (MM-DD) for demo, or full string
     const isHoliday = HOLIDAYS.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
-    
     return isWeekend || isHoliday;
   };
 
@@ -140,14 +182,12 @@ const App: React.FC = () => {
            currentDate.getFullYear() === today.getFullYear();
   };
 
-  // Gets ALL shifts for a specific staff on a specific day
   const getShifts = (staffId: string, day: number): ShiftAssignment[] => {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateStr = formatDateToISO(date);
     return assignments.filter(a => a.staffId === staffId && a.date === dateStr);
   };
 
-  // Helper for single shift retrieval (legacy support/swap) - returns the first found
   const getFirstShift = (staffId: string, day: number): ShiftAssignment | undefined => {
     const shifts = getShifts(staffId, day);
     return shifts.length > 0 ? shifts[0] : undefined;
@@ -174,7 +214,6 @@ const App: React.FC = () => {
 
   // Auth Actions
   const handleLogin = async (username: string, password: string) => {
-    // 1. Try Supabase Login
     try {
         const { data, error } = await supabase
             .from('users')
@@ -186,13 +225,13 @@ const App: React.FC = () => {
         if (!error && data) {
             setIsLoggedIn(true);
             setCurrentUser(data.name || username);
+            setCurrentUsername(data.username);
             return { success: true };
         }
     } catch (e) {
         console.log("Database connection failed, using fallback.");
     }
 
-    // 2. Fallback for Demo / Pre-defined users (if DB is not connected)
     const demoUsers: Record<string, string> = {
         'tor': 'พี่ต่อ',
         'kik': 'พี่กิ๊ก',
@@ -204,20 +243,21 @@ const App: React.FC = () => {
     };
 
     if (demoUsers[username]) {
-         // Check password (matches username for demo users, or '1234' for admin)
          if (password === username || (username === 'admin' && password === '1234')) {
              setIsLoggedIn(true);
              setCurrentUser(demoUsers[username]);
+             setCurrentUsername(username);
              return { success: true };
          }
     }
 
-    return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง (หรือยังไม่ได้เชื่อมต่อฐานข้อมูล)' };
+    return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentUser('');
+    setCurrentUsername('');
     setIsSwapMode(false);
     setSwapSource(null);
     setSelectedCell(null);
@@ -229,26 +269,20 @@ const App: React.FC = () => {
     setIsExporting(true);
 
     try {
-      // Use html2canvas to render the off-screen print view
       const canvas = await html2canvas(printRef.current, {
-        scale: 3, // High resolution for print clarity
+        scale: 3,
         logging: false,
         useCORS: true,
         backgroundColor: '#ffffff'
       });
 
       const imgData = canvas.toDataURL('image/png');
-      
-      // A4 Landscape
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
-
     } catch (error) {
       console.error("Export failed:", error);
       alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
@@ -259,7 +293,13 @@ const App: React.FC = () => {
 
   // Actions
   const handleCellClick = (staffId: string, day: number) => {
-    if (!isLoggedIn) return; // Prevent action if not logged in
+    if (!isLoggedIn) return; 
+
+    // Permission Check
+    if (!canEdit) {
+        alert("ขออภัย: ตารางเวรเดือนนี้ยังไม่ถูกประกาศโดยผู้ดูแล (พี่กิ๊ก) \nคุณยังไม่สามารถแก้ไขข้อมูลได้ในขณะนี้");
+        return;
+    }
 
     const clickedCoord: CellCoordinate = { staffId, day };
 
@@ -270,7 +310,6 @@ const App: React.FC = () => {
     setSelectedCell(clickedCoord);
   };
 
-  // Logic to add or replace shift based on 1-shift vs 2-shift rule
   const updateAssignmentsWithRule = (
     currentAssignments: ShiftAssignment[], 
     staffId: string, 
@@ -280,16 +319,12 @@ const App: React.FC = () => {
     const dateStr = formatDateToISO(date);
     const isSpecialDay = isDateWeekendOrHoliday(date);
     
-    // Find existing shifts for this staff on this day
     const existingShifts = currentAssignments.filter(a => a.staffId === staffId && a.date === dateStr);
-    
-    // Check if we already have this specific shift type
     const hasThisType = existingShifts.some(a => a.shiftType === newType);
     if (hasThisType) {
-        return currentAssignments; // Do nothing if already exists
+        return currentAssignments; 
     }
 
-    // Prepare new assignment object
     const newAssignment = {
         id: `${staffId}-${dateStr}-${newType}`,
         staffId,
@@ -297,27 +332,16 @@ const App: React.FC = () => {
         shiftType: newType
     };
 
-    // Save to DB
     saveAssignmentToDB(newAssignment);
-
-    // Filter out existing shifts from the main array so we can rebuild
     const otherAssignments = currentAssignments.filter(a => !(a.staffId === staffId && a.date === dateStr));
 
     if (!isSpecialDay) {
-        // On normal days, only 1 shift allowed (remove others implicitly by not including them from existingShifts)
-        // We must also delete the old ones from DB
         existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
-        
         return [...otherAssignments, newAssignment];
     } else {
         if (existingShifts.length < 2) {
             return [...otherAssignments, ...existingShifts, newAssignment];
         } else {
-            // If already 2, replace the last one? Or just don't add? 
-            // For simplicity, let's say we replace all with the new one to avoid overflow if logic isn't perfect
-            // Or better, replace the *first* one found or just reset.
-            // Let's reset to just this new one to be safe, or keep the first one.
-            // Current logic: Clear and set new.
             existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
             return [...otherAssignments, newAssignment];
         }
@@ -325,14 +349,11 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // 1. Identify Source Info
     const sourceShifts = getShifts(source.staffId, source.day);
-    // Prioritize Afternoon if present to handle B-D combo intent
     const sourceAfternoon = sourceShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
     const sourceShiftToSwap = sourceAfternoon || sourceShifts[0];
     const sourceType = sourceShiftToSwap ? sourceShiftToSwap.shiftType : ShiftType.OFF;
 
-    // 2. Identify Target Info
     const targetShifts = getShifts(target.staffId, target.day);
     const targetAfternoon = targetShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
     const targetShiftToSwap = targetAfternoon || targetShifts[0];
@@ -343,7 +364,6 @@ const App: React.FC = () => {
     const sourceDateStr = formatDateToISO(sourceDateObj);
     const targetDateStr = formatDateToISO(targetDateObj);
 
-    // 3. Check for B-D Combo (Look ahead 1 day)
     const getNextDate = (d: Date) => {
         const next = new Date(d);
         next.setDate(d.getDate() + 1);
@@ -360,13 +380,10 @@ const App: React.FC = () => {
     const targetNextShifts = assignments.filter(a => a.staffId === target.staffId && a.date === targetNextDateStr);
     const targetHasNextNight = targetNextShifts.some(s => s.shiftType === ShiftType.NIGHT);
 
-    // 4. Determine if we need to swap the Night shift as well
-    // Condition: If moving an Afternoon shift that has a linked Night shift
     let swapNight = false;
     if (sourceType === ShiftType.AFTERNOON && sourceHasNextNight) swapNight = true;
     if (targetType === ShiftType.AFTERNOON && targetHasNextNight) swapNight = true;
 
-    // Logging
     const sName = getStaffName(source.staffId);
     const tName = getStaffName(target.staffId);
     
@@ -378,12 +395,8 @@ const App: React.FC = () => {
         addHistoryLog(sourceNextDateStr, `สลับเวรดึก (ต่อเนื่องจากเวรบ่าย) ระหว่าง ${sName} กับ ${tName}`, 'SWAP');
     }
 
-    // 5. Execute Swap
     setAssignments(prev => {
         let nextAssignments = [...prev];
-
-        // --- Swap Main Day (D1) ---
-        // Delete original assignments from DB and State
         if (sourceType !== ShiftType.OFF) {
             const id = `${source.staffId}-${sourceDateStr}-${sourceType}`;
             nextAssignments = nextAssignments.filter(a => a.id !== id);
@@ -395,7 +408,6 @@ const App: React.FC = () => {
             deleteAssignmentFromDB(id);
         }
 
-        // Add swapped assignments to DB and State
         if (targetType !== ShiftType.OFF) {
             const newAssign = { id: `${source.staffId}-${sourceDateStr}-${targetType}`, staffId: source.staffId, date: sourceDateStr, shiftType: targetType };
             nextAssignments.push(newAssign);
@@ -407,12 +419,10 @@ const App: React.FC = () => {
             saveAssignmentToDB(newAssign);
         }
 
-        // --- Swap Next Day Night (D2) if Combo ---
         if (swapNight) {
             const sNextNightType = sourceHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
             const tNextNightType = targetHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
 
-            // Remove existing Night shifts from next day
             if (sNextNightType === ShiftType.NIGHT) {
                  const id = `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`;
                  nextAssignments = nextAssignments.filter(a => a.id !== id);
@@ -424,7 +434,6 @@ const App: React.FC = () => {
                  deleteAssignmentFromDB(id);
             }
 
-            // Apply swapped Night shifts
             if (tNextNightType === ShiftType.NIGHT) {
                 const newAssign = { id: `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: source.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT };
                 nextAssignments.push(newAssign);
@@ -436,7 +445,6 @@ const App: React.FC = () => {
                 saveAssignmentToDB(newAssign);
             }
         }
-
         return nextAssignments;
     });
 
@@ -454,9 +462,7 @@ const App: React.FC = () => {
     
     const staffName = getStaffName(staffId);
 
-    // Helper: Remove a specific shift type from ALL users on a specific date
     const removeGlobalShift = (list: ShiftAssignment[], dStr: string, type: ShiftType) => {
-        // Find them first to delete from DB
         const toRemove = list.filter(a => a.date === dStr && a.shiftType === type);
         toRemove.forEach(a => deleteAssignmentFromDB(a.id));
         return list.filter(a => !(a.date === dStr && a.shiftType === type));
@@ -464,35 +470,27 @@ const App: React.FC = () => {
 
     if (action === 'OFF') {
         const currentShifts = getShifts(staffId, day);
-        
-        // Log Deletion
         if (currentShifts.length > 0) {
             const shiftNames = currentShifts.map(s => SHIFT_CONFIG[s.shiftType].label).join('+');
             addHistoryLog(targetDateStr, `ลบ ${shiftNames} ของ ${staffName} ออก`, 'REMOVE');
         }
 
         setAssignments(prev => {
-            // 1. Remove all shifts for this day for this user
             const toDelete = prev.filter(a => a.staffId === staffId && a.date === targetDateStr);
             toDelete.forEach(a => deleteAssignmentFromDB(a.id));
-            
             let newAssignments = prev.filter(a => !(a.staffId === staffId && a.date === targetDateStr));
 
-            // 2. Cascade Delete linked shifts
             currentShifts.forEach(shift => {
                  if (shift.shiftType === ShiftType.AFTERNOON) {
-                    // Check next night
                     const linkedNight = newAssignments.find(a => a.staffId === staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
                     if (linkedNight) {
                         deleteAssignmentFromDB(linkedNight.id);
                         newAssignments = newAssignments.filter(a => a.id !== linkedNight.id);
                     }
                  } else if (shift.shiftType === ShiftType.NIGHT) {
-                    // Check prev afternoon
                     const prevDate = new Date(targetDate);
                     prevDate.setDate(targetDate.getDate() - 1);
                     const prevDateStr = formatDateToISO(prevDate);
-                    
                     const linkedAfternoon = newAssignments.find(a => a.staffId === staffId && a.date === prevDateStr && a.shiftType === ShiftType.AFTERNOON);
                     if (linkedAfternoon) {
                         deleteAssignmentFromDB(linkedAfternoon.id);
@@ -500,12 +498,10 @@ const App: React.FC = () => {
                     }
                  }
             });
-
             return newAssignments;
         });
 
     } else if (action === 'MORNING') {
-        // Log Change/Add
         const existingMorningOwner = assignments.find(a => a.date === targetDateStr && a.shiftType === ShiftType.MORNING);
         if (existingMorningOwner && existingMorningOwner.staffId !== staffId) {
              const prevOwnerName = getStaffName(existingMorningOwner.staffId);
@@ -519,9 +515,7 @@ const App: React.FC = () => {
             return updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.MORNING);
         });
     } else if (action === 'BD_COMBO') {
-        // Log Change/Add for Afternoon
         const existingAfternoonOwner = assignments.find(a => a.date === targetDateStr && a.shiftType === ShiftType.AFTERNOON);
-        const existingNightOwner = assignments.find(a => a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
         
         let logMsg = `บ่าย-ดึก: `;
         if (existingAfternoonOwner && existingAfternoonOwner.staffId !== staffId) {
@@ -563,7 +557,6 @@ const App: React.FC = () => {
     setSelectedCell(null);
   };
 
-  // Render Helpers
   const renderCell = (staff: Staff, day: number) => {
     const shifts = getShifts(staff.id, day);
     const isSource = isSwapMode && swapSource?.staffId === staff.id && swapSource?.day === day;
@@ -598,11 +591,9 @@ const App: React.FC = () => {
         );
     }
 
-    // Dynamic classes based on auth state
-    const cursorClass = isLoggedIn ? 'cursor-pointer hover:brightness-95' : 'cursor-default';
+    const cursorClass = isLoggedIn ? (canEdit ? 'cursor-pointer hover:brightness-95' : 'cursor-not-allowed opacity-90') : 'cursor-default';
     const swapClass = isSource ? 'ring-2 ring-primary ring-inset z-10 animate-pulse' : '';
     
-    // Dynamic Today Styling based on Shift Type
     let todayClass = isCurrentDay ? 'bg-emerald-50/40' : '';
     let todayShiftHighlight = '';
     let todayDotColor = 'bg-emerald-500';
@@ -610,13 +601,9 @@ const App: React.FC = () => {
 
     if (isCurrentDay && shifts.length > 0) {
          const type = shifts[0].shiftType;
-         
-         // Animate the dot
          todayDotAnimate = 'animate-pulse';
-
          if (type === ShiftType.MORNING) {
              todayClass = 'bg-sky-50'; 
-             // Thick ring-4 for better visibility
              todayShiftHighlight = 'ring-4 ring-sky-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(56,189,248,0.3)]';
              todayDotColor = 'bg-sky-500';
          } else if (type === ShiftType.AFTERNOON) {
@@ -677,25 +664,39 @@ const App: React.FC = () => {
                <div className="flex items-center gap-2">
                  {isLoggedIn ? (
                     <div className="flex items-center gap-2">
-                         {/* Admin Controls */}
-                         <button 
-                             onClick={() => setIsAdminManagerOpen(true)}
-                             className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200"
-                         >
-                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" x2="20" y1="8" y2="14"/><line x1="23" x2="17" y1="11" y2="11"/></svg>
-                             จัดการผู้ดูแล
-                         </button>
+                         {/* Manager Actions */}
+                         {isManager && (
+                             <>
+                                {!isPublished && (
+                                    <button 
+                                        onClick={handlePublish}
+                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                        บันทึกและประกาศตารางเวร
+                                    </button>
+                                )}
+                                
+                                <button 
+                                    onClick={() => setIsAdminManagerOpen(true)}
+                                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" x2="20" y1="8" y2="14"/><line x1="23" x2="17" y1="11" y2="11"/></svg>
+                                    จัดการผู้ดูแล
+                                </button>
+                             </>
+                         )}
 
-                        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-xl">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl">
                             <span className="flex h-2 w-2 relative">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPublished ? 'bg-green-400' : 'bg-amber-400'}`}></span>
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${isPublished ? 'bg-green-500' : 'bg-amber-500'}`}></span>
                             </span>
-                            <span className="text-sm font-bold truncate max-w-[80px]">{currentUser || 'Admin'}</span>
-                            <div className="w-px h-4 bg-green-200 mx-1"></div>
+                            <span className="text-sm font-bold truncate max-w-[80px]">{currentUser || 'User'}</span>
+                            <div className="w-px h-4 bg-slate-200 mx-1"></div>
                             <button 
                                 onClick={handleLogout}
-                                className="text-xs font-semibold hover:text-green-900 underline decoration-green-300 hover:decoration-green-500 transition-all"
+                                className="text-xs font-semibold hover:text-red-700 underline decoration-slate-300 hover:decoration-red-300 transition-all"
                             >
                                 ออก
                             </button>
@@ -707,7 +708,7 @@ const App: React.FC = () => {
                         className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-all text-sm font-semibold"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        เข้าสู่ระบบ (Admin)
+                        เข้าสู่ระบบ
                     </button>
                  )}
                </div>
@@ -779,7 +780,20 @@ const App: React.FC = () => {
           )}
 
           <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 flex items-center gap-4 md:gap-6 overflow-x-auto shrink-0 z-40 custom-scrollbar scrollbar-hide">
-             <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wide mr-2 shrink-0">สถานะ:</span>
+             <div className="flex items-center mr-4 gap-2">
+                 <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wide shrink-0">สถานะ:</span>
+                 {isPublished ? (
+                     <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                         ประกาศแล้ว
+                     </span>
+                 ) : (
+                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                         ฉบับร่าง
+                     </span>
+                 )}
+             </div>
              {Object.values(SHIFT_CONFIG).filter(c => c.code).map((config) => (
                <div key={config.code} className="flex items-center gap-2 shrink-0 bg-white px-2.5 py-1 rounded-lg border border-slate-100 shadow-sm">
                   <span className={`w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded ${config.colorBg} ${config.colorText} text-xs md:text-sm font-bold`}>{config.code}</span>
