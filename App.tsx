@@ -7,6 +7,7 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { LoginModal } from './components/LoginModal';
 import { AdminManagerModal } from './components/AdminManagerModal';
 import { OfficialPrintView } from './components/OfficialPrintView';
+import { ShiftLogList } from './components/ShiftLogList';
 import { supabase } from './supabaseClient';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -50,20 +51,25 @@ const App: React.FC = () => {
     return isLoggedIn && (isManager || isPublished);
   }, [isLoggedIn, isManager, isPublished]);
 
+  // Generate Month Key for DB (e.g., "2024-02")
+  const getMonthKey = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   // --- Supabase Integration ---
 
-  // Fetch Assignments and Status on Load or Date Change
+  // Fetch Assignments, Status, and Logs on Load or Date Change
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const monthKey = getMonthKey(currentDate);
+
         // 1. Fetch Assignments
         const { data: shiftData, error: shiftError } = await supabase
           .from('Table-kik')
           .select('*');
           
-        if (shiftError) {
-            console.error('Error fetching assignments:', shiftError);
-        }
+        if (shiftError) console.error('Error fetching assignments:', shiftError);
 
         if (shiftData) {
           const formattedData: ShiftAssignment[] = shiftData.map((item: any) => ({
@@ -76,18 +82,40 @@ const App: React.FC = () => {
         }
 
         // 2. Fetch Publish Status
-        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
         const { data: statusData, error: statusError } = await supabase
           .from('monthly_roster_status')
           .select('is_published')
           .eq('month_key', monthKey)
           .single();
 
-        if (statusError && statusError.code !== 'PGRST116') { // Ignore "Row not found" error
+        if (statusError && statusError.code !== 'PGRST116') {
             console.error('Error fetching status:', statusError);
         }
         
-        setIsPublished(statusData?.is_published || false);
+        const published = statusData?.is_published || false;
+        setIsPublished(published);
+
+        // 3. Fetch History/Logs for this month
+        const { data: logData, error: logError } = await supabase
+            .from('shift_logs')
+            .select('*')
+            .eq('month_key', monthKey)
+            .order('created_at', { ascending: false });
+
+        if (logError) console.error('Error fetching logs:', logError);
+
+        if (logData) {
+            const formattedLogs: ShiftHistory[] = logData.map((item: any) => ({
+                id: String(item.id),
+                timestamp: new Date(item.created_at),
+                targetDate: item.target_date,
+                message: item.message,
+                actionType: item.action_type
+            }));
+            setHistory(formattedLogs);
+        } else {
+            setHistory([]);
+        }
 
       } catch (err) {
         console.error('Connection error:', err);
@@ -104,7 +132,7 @@ const App: React.FC = () => {
     if (!confirm) return;
 
     try {
-        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthKey = getMonthKey(currentDate);
         const { error } = await supabase
             .from('monthly_roster_status')
             .upsert({ 
@@ -213,7 +241,7 @@ const App: React.FC = () => {
 
   const getStaffName = (id: string) => STAFF_LIST.find(s => s.id === id)?.name || 'Unknown';
 
-  const addHistoryLog = (targetDate: string, message: string, actionType: ShiftHistory['actionType']) => {
+  const addHistoryLog = async (targetDate: string, message: string, actionType: ShiftHistory['actionType']) => {
     const newLog: ShiftHistory = {
         id: Date.now().toString() + Math.random().toString(),
         timestamp: new Date(),
@@ -221,14 +249,34 @@ const App: React.FC = () => {
         message,
         actionType
     };
+    
+    // Optimistic Update
     setHistory(prev => [newLog, ...prev]);
+
+    // Save to DB (Persistent Log)
+    // We record logs even if not published, but displaying them is controlled by isPublished
+    // OR we can decide to only record logs if published. 
+    // Usually, admins want to see logs of their edits too, but the request emphasized "Swaps shown after publish".
+    // I will save all logs to DB to be safe, but only render the list if published.
+    try {
+        const monthKey = getMonthKey(currentDate);
+        const { error } = await supabase.from('shift_logs').insert({
+            month_key: monthKey,
+            target_date: targetDate,
+            message: message,
+            action_type: actionType
+        });
+        if (error) console.error("Error saving log", error);
+    } catch (e) {
+        console.error("Failed to save log", e);
+    }
   };
 
   // Auth Actions
   const handleLogin = async (username: string, password: string) => {
     try {
         const { data, error } = await supabase
-            .from('users-table-kik') // Use the new table name
+            .from('users-table-kik') 
             .select('*')
             .eq('username', username)
             .eq('password', password)
@@ -886,6 +934,13 @@ const App: React.FC = () => {
                           </div>
                       ))}
                       
+                      {/* Logs Section - Only visible if published */}
+                      {isPublished && (
+                        <div className="p-4 md:p-8 bg-slate-50/50">
+                            <ShiftLogList logs={history} />
+                        </div>
+                      )}
+
                       <div className="h-24 w-full shrink-0"></div>
               </div>
           </div>
