@@ -32,6 +32,7 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
   
   // Use helper to ensure matching key format
   const dateStr = formatDateToISO(selectedDate);
+  // Filter relevant history - effectively mostly swaps now
   const relevantHistory = historyLogs.filter(log => log.targetDate === dateStr);
 
   return (
@@ -152,13 +153,13 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
           <div className="border-t border-gray-100 pt-4">
              <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-               ประวัติการเปลี่ยนแปลง (วันนี้)
+               ประวัติการแลกเวร (วันนี้)
              </h4>
              
              <div className="space-y-3">
                 {relevantHistory.length === 0 ? (
                     <div className="text-center py-4 text-gray-400 text-sm bg-gray-50 rounded-lg">
-                        ยังไม่มีประวัติการแก้ไข
+                        ยังไม่มีประวัติการแลกเวร
                     </div>
                 ) : (
                     relevantHistory.slice().reverse().map((log) => (
@@ -168,7 +169,7 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
                                     ${log.actionType === 'ADD' ? 'bg-green-100 text-green-700' : 
                                       log.actionType === 'CHANGE' ? 'bg-blue-100 text-blue-700' :
                                       log.actionType === 'REMOVE' ? 'bg-red-100 text-red-700' :
-                                      'bg-purple-100 text-purple-700'}
+                                      'bg-indigo-100 text-indigo-700'}
                                  `}>
                                      {log.actionType}
                                  </span>

@@ -511,13 +511,22 @@ const App: React.FC = () => {
 
     const sName = getStaffName(source.staffId);
     const tName = getStaffName(target.staffId);
+
+    // New Log Formatting
+    const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    const sShift = sourceType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[sourceType].label;
+    const tShift = targetType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[targetType].label;
+    
+    // Message: "เวร [ช่วงเวลา] [ชื่อ] วันที่ [วันที่] แลกเป็น เวร [ช่วงเวลา] [ชื่อ] วันที่ [วันที่]"
+    const msg = `เวร ${sShift} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกเป็น เวร ${tShift} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
     
     if (sourceType !== ShiftType.OFF || targetType !== ShiftType.OFF) {
-        addHistoryLog(sourceDateStr, `สลับเวรระหว่าง ${sName} (${SHIFT_CONFIG[sourceType].label}) กับ ${tName} (${SHIFT_CONFIG[targetType].label})`, 'SWAP');
+        addHistoryLog(sourceDateStr, msg, 'SWAP');
     }
     
     if (swapNight) {
-        addHistoryLog(sourceNextDateStr, `สลับเวรดึก (ต่อเนื่องจากเวรบ่าย) ระหว่าง ${sName} กับ ${tName}`, 'SWAP');
+        const msgNight = `เวรดึก (ต่อเนื่อง) ${sName} วันที่ ${formatDateShort(sourceNextDate)} แลกเป็น เวรดึก (ต่อเนื่อง) ${tName} วันที่ ${formatDateShort(targetNextDate)}`;
+        addHistoryLog(sourceNextDateStr, msgNight, 'SWAP');
     }
 
     setAssignments(prev => {
@@ -585,7 +594,7 @@ const App: React.FC = () => {
     nextDate.setDate(targetDate.getDate() + 1);
     const nextDateStr = formatDateToISO(nextDate);
     
-    const staffName = getStaffName(staffId);
+    // const staffName = getStaffName(staffId); // Not used anymore for logging
 
     const removeGlobalShift = (list: ShiftAssignment[], dStr: string, type: ShiftType) => {
         const toRemove = list.filter(a => a.date === dStr && a.shiftType === type);
@@ -595,10 +604,7 @@ const App: React.FC = () => {
 
     if (action === 'OFF') {
         const currentShifts = getShifts(staffId, day);
-        if (currentShifts.length > 0) {
-            const shiftNames = currentShifts.map(s => SHIFT_CONFIG[s.shiftType].label).join('+');
-            addHistoryLog(targetDateStr, `ลบ ${shiftNames} ของ ${staffName} ออก`, 'REMOVE');
-        }
+        // REMOVED LOGGING FOR DELETE/REMOVE
 
         setAssignments(prev => {
             const toDelete = prev.filter(a => a.staffId === staffId && a.date === targetDateStr);
@@ -627,28 +633,14 @@ const App: React.FC = () => {
         });
 
     } else if (action === 'MORNING') {
-        const existingMorningOwner = assignments.find(a => a.date === targetDateStr && a.shiftType === ShiftType.MORNING);
-        if (existingMorningOwner && existingMorningOwner.staffId !== staffId) {
-             const prevOwnerName = getStaffName(existingMorningOwner.staffId);
-             addHistoryLog(targetDateStr, `เวรเช้า: เปลี่ยนจาก ${prevOwnerName} เป็น ${staffName}`, 'CHANGE');
-        } else if (!existingMorningOwner) {
-             addHistoryLog(targetDateStr, `เวรเช้า: เพิ่ม ${staffName} ลงเวร`, 'ADD');
-        }
+        // REMOVED LOGGING FOR MORNING ASSIGNMENT
 
         setAssignments(prev => {
             let temp = removeGlobalShift(prev, targetDateStr, ShiftType.MORNING);
             return updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.MORNING);
         });
     } else if (action === 'BD_COMBO') {
-        const existingAfternoonOwner = assignments.find(a => a.date === targetDateStr && a.shiftType === ShiftType.AFTERNOON);
-        
-        let logMsg = `บ่าย-ดึก: `;
-        if (existingAfternoonOwner && existingAfternoonOwner.staffId !== staffId) {
-            logMsg += `เปลี่ยน ${getStaffName(existingAfternoonOwner.staffId)} เป็น ${staffName}`;
-        } else {
-            logMsg += `เพิ่ม ${staffName}`;
-        }
-        addHistoryLog(targetDateStr, logMsg, 'CHANGE');
+        // REMOVED LOGGING FOR BD COMBO
 
         setAssignments(prev => {
             let temp = removeGlobalShift(prev, targetDateStr, ShiftType.AFTERNOON);
