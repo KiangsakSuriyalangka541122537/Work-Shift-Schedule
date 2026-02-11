@@ -9,7 +9,7 @@ import { AdminManagerModal } from './components/AdminManagerModal';
 import { OfficialPrintView } from './components/OfficialPrintView';
 import { supabase } from './supabaseClient';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf'; // Fixed import: named import is required for esm.sh
 
 const App: React.FC = () => {
   // Auth State
@@ -45,6 +45,7 @@ const App: React.FC = () => {
     const fetchAssignments = async () => {
       try {
         // ดึงข้อมูลจากตาราง Table-kik
+        // หมายเหตุ: การใช้ .from('Table-kik') จะส่งชื่อตารางไปตรงๆ
         const { data, error } = await supabase
           .from('Table-kik')
           .select('*');
@@ -70,9 +71,7 @@ const App: React.FC = () => {
     };
 
     fetchAssignments();
-    
-    // Optional: Set up Realtime subscription here if needed
-  }, []); // Run once on mount, or add dependencies if you want to refetch on month change
+  }, []); 
 
   // Helper to sync changes to DB
   const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
