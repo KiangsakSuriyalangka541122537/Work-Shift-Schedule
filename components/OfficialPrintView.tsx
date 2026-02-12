@@ -75,64 +75,66 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
   };
 
   const PageLayout = ({ pageNumber }: { pageNumber: number }) => (
-    <div className="print-page w-[297mm] h-[210mm] bg-white p-8 font-sans box-border relative text-black mb-10 overflow-hidden" style={{ color: '#000000' }}>
+    <div className="print-page w-[297mm] h-[210mm] bg-white p-10 font-sans box-border relative text-slate-800 mb-10 overflow-hidden">
       
       {/* Header */}
-      <div className="text-center mb-4">
-        <h1 className="font-bold text-xl mb-1 text-gray-900">หลักฐานการขออนุมัติปฏิบัติงานนอกเวลาราชการ</h1>
-        <p className="text-xs font-medium text-gray-700">
-          เวรเช้า 08.00 – 16.00 น. เวรบ่าย 16.00 – 24.00 น. เวรดึก 24.00-08.00 น.
+      <div className="text-center mb-6">
+        <h1 className="font-bold text-2xl mb-2 text-slate-900">หลักฐานการขออนุมัติปฏิบัติงานนอกเวลาราชการ</h1>
+        <p className="text-sm font-medium text-slate-600 mb-1">
+          เวรเช้า 08.00 – 16.00 น. &nbsp;|&nbsp; เวรบ่าย 16.00 – 24.00 น. &nbsp;|&nbsp; เวรดึก 24.00 – 08.00 น.
         </p>
-        <p className="text-sm font-bold mt-1 text-gray-900">
-          ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน {monthName} พ.ศ. {buddhistYear} งานศูนย์คอมพิวเตอร์
+        <p className="text-base font-bold mt-2 text-slate-800">
+          ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน <span className="text-indigo-900">{monthName}</span> พ.ศ. {buddhistYear} งานศูนย์คอมพิวเตอร์
         </p>
       </div>
 
-      {/* Table Container - to handle sizing */}
+      {/* Table Container */}
       <div className="w-full">
         <table className="print-table w-full">
             <thead>
-                <tr className="h-10">
-                    <th style={{width: '35px'}}>ลำดับ</th>
-                    <th style={{width: '150px'}}>ชื่อ – สกุล</th>
-                    <th colSpan={31} style={{padding: '2px'}}>วันที่ปฏิบัติงาน</th>
+                <tr className="h-12">
+                    <th style={{width: '40px'}}>ลำดับ</th>
+                    <th style={{width: '160px'}}>ชื่อ – สกุล</th>
+                    <th colSpan={31} style={{padding: '4px'}}>วันที่ปฏิบัติงาน</th>
                     {/* Dynamic Last Column Header */}
-                    <th style={{width: '100px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
+                    <th style={{width: '110px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
                 </tr>
-                <tr className="h-5">
-                    <th style={{backgroundColor: '#e5e7eb'}}></th>
-                    <th style={{backgroundColor: '#e5e7eb'}}></th>
+                <tr className="h-6">
+                    <th className="bg-slate-50"></th>
+                    <th className="bg-slate-50"></th>
                     {daysArray.map(day => (
                         <th key={day} style={{
-                            width: '21px', // Adjusted to fit 31 days + other cols in A4
-                            backgroundColor: isWeekendOrHoliday(day) ? '#d1d5db' : '#f3f4f6', 
-                            color: '#000000',
+                            width: '21px', 
+                            backgroundColor: isWeekendOrHoliday(day) ? '#f1f5f9' : '#ffffff', // Lighter gray for weekends
+                            color: isWeekendOrHoliday(day) ? '#64748b' : '#334155',
                             fontWeight: 'bold',
                             fontSize: '10px'
                         }}>
                         {day}
                         </th>
                     ))}
-                    <th style={{backgroundColor: '#e5e7eb'}}></th>
+                    <th className="bg-slate-50"></th>
                 </tr>
             </thead>
             <tbody>
                 {staffList.map((staff, index) => (
                 <tr key={staff.id}>
-                    <td>{index + 1}</td>
-                    <td style={{textAlign: 'left', paddingLeft: '5px', fontWeight: '600', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden'}}>{staff.name}</td>
+                    <td className="text-slate-500">{index + 1}</td>
+                    <td style={{textAlign: 'left', paddingLeft: '8px', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden'}} className="text-slate-800">
+                        {staff.name}
+                    </td>
                     {daysArray.map(day => (
                     <td key={day} style={{
                         fontWeight: 'bold', 
-                        backgroundColor: isWeekendOrHoliday(day) ? '#e5e7eb' : 'transparent',
-                        color: '#000000',
+                        backgroundColor: isWeekendOrHoliday(day) ? '#f8fafc' : 'transparent', // Very subtle background for weekend cells
+                        color: '#1e293b',
                         fontSize: '11px'
                     }}>
                         {getShiftCode(staff.id, day)}
                     </td>
                     ))}
                     {/* Dynamic Last Column Content */}
-                    <td style={{fontWeight: 'bold', fontSize: '11px'}}>
+                    <td style={{fontWeight: 'bold', fontSize: '12px', color: '#1e293b'}}>
                         {pageNumber === 2 ? calculateAmount(staff.id) : ""}
                     </td>
                 </tr>
@@ -142,8 +144,13 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="mt-2 text-[10px] font-bold text-gray-700">
-        หมายเหตุ : เวรบ่ายและดึก รวมกัน 750 บาท
+      <div className="mt-4 flex justify-between items-end text-slate-500 text-xs">
+         <div>
+            <span className="font-bold text-slate-700">หมายเหตุ :</span> เวรบ่ายและดึก รวมกัน 750 บาท
+         </div>
+         <div>
+            หน้า {pageNumber} / 2
+         </div>
       </div>
     </div>
   );
@@ -154,22 +161,27 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         .print-table {
           width: 100%;
           border-collapse: collapse;
-          border: 1px solid #000000; /* Strict black border for printing */
-          color: #000000;
-          table-layout: fixed; /* Ensures columns respect widths */
+          border: 1px solid #94a3b8; /* Slate 400 - Outer Frame */
+          color: #1e293b;
+          table-layout: fixed;
         }
         .print-table th, .print-table td {
-          border: 1px solid #000000;
-          padding: 2px;
+          border: 0.5px solid #cbd5e1; /* Slate 300 - Inner Grid (Thinner) */
+          padding: 4px 2px; /* Comfortable padding */
           text-align: center;
           vertical-align: middle;
-          height: 24px; 
-          line-height: 1;
+          height: 28px; /* Consistent row height */
+          line-height: 1.2;
         }
         .print-table th {
-          background-color: #f3f4f6; /* Gray-100 */
+          background-color: #f8fafc; /* Slate 50 - Very light header */
           font-weight: bold;
           font-size: 11px;
+          color: #334155;
+        }
+        /* Ensure specific borders don't double up or look weird */
+        .print-table tr:last-child td {
+           border-bottom: none;
         }
       `}</style>
       

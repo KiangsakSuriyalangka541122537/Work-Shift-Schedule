@@ -389,6 +389,10 @@ const App: React.FC = () => {
     if (!printRef.current) return;
     setIsExporting(true);
 
+    // Wait for the render cycle to reflect the new styles (moving print view to top)
+    // This delay is crucial for html2canvas to "see" the element in the correct position
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     try {
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -403,18 +407,16 @@ const App: React.FC = () => {
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         
-        // Ensure the element is visible for html2canvas to capture it
-        // html2canvas clones the document, so we don't need to change display here generally,
-        // but ensuring no display:none exists on parents helps.
-        
         const canvas = await html2canvas(page, {
           scale: 2,
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
-          windowWidth: 1920, // Emulate desktop width to prevent responsive issues
+          windowWidth: 1920,
           windowHeight: 1080,
-          // x, y, width, height: explicitly define if needed, but page element should suffice
+          // Explicitly set x/y to 0 to capture from the top-left of the element
+          x: 0,
+          y: 0
         });
 
         const imgData = canvas.toDataURL('image/png');
@@ -985,12 +987,33 @@ const App: React.FC = () => {
         </main>
       </div>
 
+      {/* Loading Overlay to hide the flashing print area from user view */}
+      {isExporting && (
+        <div className="fixed inset-0 z-[10000] bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+           <svg className="animate-spin h-10 w-10 mb-4 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+           </svg>
+           <div className="text-xl font-bold">กำลังสร้างไฟล์ PDF...</div>
+           <div className="text-sm text-gray-300 mt-2">กรุณารอสักครู่ ระบบกำลังจัดเตรียมเอกสาร 2 หน้า</div>
+        </div>
+      )}
+
       {/* 
-         HIDDEN PRINT AREA 
-         Updated Strategy: Position absolute with z-index to hide behind content.
-         Avoids opacity:0 or fixed positioning which can confuse html2canvas.
+         HIDDEN PRINT AREA - STRATEGY:
+         1. Default: Position off-screen (bottom) so it is rendered but invisible to user.
+         2. Exporting: Position top-left (0,0) with high Z-Index but BELOW the loading overlay.
+            This ensures html2canvas can "see" it within the viewport without error.
       */}
-      <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -50, width: '297mm', pointerEvents: 'none' }}>
+      <div style={{ 
+          position: 'fixed', 
+          top: isExporting ? 0 : '100vh', // Move off-screen when not using
+          left: 0, 
+          zIndex: isExporting ? 5000 : -50, // High Z when exporting
+          width: '297mm',
+          visibility: 'visible', // Must be visible for html2canvas
+          pointerEvents: 'none'
+      }}>
         <div ref={printRef} style={{ width: '100%', backgroundColor: '#ffffff' }}>
           <OfficialPrintView 
             currentDate={currentDate}
