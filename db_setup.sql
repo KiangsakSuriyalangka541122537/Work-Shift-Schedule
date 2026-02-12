@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.monthly_roster_status (
     month_key text primary key, 
     is_published boolean default false,
     published_by text,
+    original_assignments jsonb, -- [NEW] เก็บข้อมูลตารางเวรต้นฉบับตอนกดประกาศ (Snapshot)
     updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 

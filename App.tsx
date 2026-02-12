@@ -23,6 +23,8 @@ const App: React.FC = () => {
   // State
   const [currentDate, setCurrentDate] = useState(new Date()); // Tracks the month viewing
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([]);
+  // NEW: Store the original schedule (snapshot) when published
+  const [originalAssignments, setOriginalAssignments] = useState<ShiftAssignment[]>([]); 
   const [history, setHistory] = useState<ShiftHistory[]>([]);
   const [isPublished, setIsPublished] = useState(false); // Track if current month is published
   
@@ -80,7 +82,7 @@ const App: React.FC = () => {
       try {
         const monthKey = getMonthKey(currentDate);
 
-        // 1. Fetch Assignments
+        // 1. Fetch Assignments (Live Data)
         const { data: shiftData, error: shiftError } = await supabase
           .from('Table-kik')
           .select('*');
@@ -97,10 +99,10 @@ const App: React.FC = () => {
           setAssignments(formattedData);
         }
 
-        // 2. Fetch Publish Status
+        // 2. Fetch Publish Status AND Original Snapshot
         const { data: statusData, error: statusError } = await supabase
           .from('monthly_roster_status')
-          .select('is_published')
+          .select('is_published, original_assignments')
           .eq('month_key', monthKey)
           .single();
 
@@ -110,6 +112,13 @@ const App: React.FC = () => {
         
         const published = statusData?.is_published || false;
         setIsPublished(published);
+        
+        // Load the snapshot if it exists
+        if (statusData?.original_assignments) {
+            setOriginalAssignments(statusData.original_assignments as ShiftAssignment[]);
+        } else {
+            setOriginalAssignments([]);
+        }
 
         // 3. Fetch History/Logs for this month
         const { data: logData, error: logError } = await supabase
@@ -161,19 +170,21 @@ const App: React.FC = () => {
 
         if (deleteError) throw deleteError;
 
-        // 2. Unpublish (Set back to draft)
+        // 2. Unpublish (Set back to draft) AND Clear Snapshot
         const { error: statusError } = await supabase
             .from('monthly_roster_status')
             .upsert({ 
                 month_key: monthKey, 
                 is_published: false,
-                published_by: currentUsername
+                published_by: currentUsername,
+                original_assignments: null // Clear the snapshot
             });
 
         if (statusError) throw statusError;
 
         // Clear local state for this month & Set to Draft
         setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
+        setOriginalAssignments([]);
         setIsPublished(false);
         
         alert("ล้างข้อมูลและยกเลิกการประกาศเรียบร้อยแล้ว");
@@ -186,22 +197,29 @@ const App: React.FC = () => {
   // Publish Action
   const handlePublish = async () => {
     if (!isKikOrAdmin) return;
-    const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?\nหลังจากประกาศแล้ว เจ้าหน้าที่ท่านอื่นจะสามารถเข้ามาแก้ไขหรือแลกเปลี่ยนเวรได้");
+    const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?\n\nระบบจะทำการบันทึกตารางเวรปัจจุบันเป็น 'ต้นฉบับ' สำหรับการพิมพ์ PDF โดยจะไม่เปลี่ยนแปลงตามการแลกเวรในภายหลัง");
     if (!confirm) return;
 
     try {
         const monthKey = getMonthKey(currentDate);
+        
+        // Save current assignments as the "Original Snapshot"
+        const snapshot = [...assignments];
+
         const { error } = await supabase
             .from('monthly_roster_status')
             .upsert({ 
                 month_key: monthKey, 
                 is_published: true,
-                published_by: currentUsername
+                published_by: currentUsername,
+                original_assignments: snapshot // Save snapshot to DB
             });
 
         if (error) throw error;
+        
         setIsPublished(true);
-        alert("ประกาศตารางเวรเรียบร้อยแล้ว");
+        setOriginalAssignments(snapshot); // Update local state
+        alert("ประกาศตารางเวรและบันทึกต้นฉบับเรียบร้อยแล้ว");
     } catch (e) {
         console.error("Publish failed", e);
         alert("เกิดข้อผิดพลาดในการประกาศตารางเวร");
@@ -426,7 +444,12 @@ const App: React.FC = () => {
       }
 
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
-      pdf.save(`duty_roster_${monthStr}.pdf`);
+      // Add suffix if printing original schedule
+      const fileName = isPublished && originalAssignments.length > 0 
+        ? `duty_roster_${monthStr}_original.pdf` 
+        : `duty_roster_${monthStr}.pdf`;
+      
+      pdf.save(fileName);
     } catch (error: any) {
       console.error("Export failed:", error);
       alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${error.message || "Unknown error"}`);
@@ -1004,6 +1027,10 @@ const App: React.FC = () => {
          1. Default: Position off-screen (bottom) so it is rendered but invisible to user.
          2. Exporting: Position top-left (0,0) with high Z-Index but BELOW the loading overlay.
             This ensures html2canvas can "see" it within the viewport without error.
+         
+         LOGIC UPDATE:
+         If published and originalAssignments (snapshot) exists, use that.
+         Otherwise, use current assignments.
       */}
       <div style={{ 
           position: 'fixed', 
@@ -1018,7 +1045,8 @@ const App: React.FC = () => {
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
-            assignments={assignments}
+            // Use Original Snapshot if available and published, otherwise use current
+            assignments={isPublished && originalAssignments.length > 0 ? originalAssignments : assignments}
             daysInMonth={daysInMonth}
             holidays={HOLIDAYS}
           />
