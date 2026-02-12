@@ -895,7 +895,7 @@ const App: React.FC = () => {
         key={`${staff.id}-${day}`}
         onClick={() => handleCellClick(staff.id, day)}
         className={`
-          h-16 flex-1 min-w-[28px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden
+          h-14 md:h-16 flex-1 min-w-[34px] md:min-w-[44px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden
           ${shifts.length === 0 && isSpecial ? 'bg-rose-50/40' : ''}
           ${cursorClass}
           ${swapClass}
@@ -904,7 +904,7 @@ const App: React.FC = () => {
         `}
       >
         {isCurrentDay && shifts.length > 0 && (
-            <div className={`absolute top-0.5 right-0.5 w-2.5 h-2.5 ${todayDotColor} ${todayDotAnimate} rounded-full shadow-sm z-30 ring-2 ring-white`}></div>
+            <div className={`absolute top-0.5 right-0.5 w-2 h-2 md:w-2.5 md:h-2.5 ${todayDotColor} ${todayDotAnimate} rounded-full shadow-sm z-30 ring-2 ring-white`}></div>
         )}
         {content}
       </div>
@@ -975,19 +975,19 @@ const App: React.FC = () => {
     <div className="h-screen w-full bg-slate-50 flex flex-col items-center justify-center font-sans overflow-hidden text-slate-700">
       <div className="w-full h-full max-w-[1920px] bg-white shadow-2xl flex flex-col relative overflow-hidden border-x border-slate-200">
         
-        <header className="bg-white z-50 px-4 md:px-8 py-4 border-b border-slate-200 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
-            <div className="flex items-center gap-4">
+        <header className="bg-white z-50 px-3 py-3 md:px-8 md:py-4 border-b border-slate-200 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 w-full">
+            <div className="flex items-center gap-3 md:gap-4">
                <div className="bg-cyan-700 p-2 md:p-3 rounded-2xl text-white shadow-sm shrink-0">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-6 md:h-6"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
                </div>
                <div>
-                  <h1 className="text-xl md:text-2xl font-bold text-slate-800 leading-tight">ตารางเวรปฏิบัติงาน</h1>
-                  <p className="text-sm md:text-base text-slate-500 hidden sm:block">โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช</p>
+                  <h1 className="text-lg md:text-2xl font-bold text-slate-800 leading-tight">ตารางเวรปฏิบัติงาน</h1>
+                  <p className="text-xs md:text-base text-slate-500 block">โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช</p>
                </div>
             </div>
 
-            <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 md:gap-4 overflow-x-auto scrollbar-hide pb-1 md:pb-0">
                
                <div className="flex items-center gap-2">
                  {isLoggedIn ? (
@@ -996,17 +996,17 @@ const App: React.FC = () => {
                              <>
                                 <button 
                                     onClick={handleResetMonth}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200"
+                                    className="flex items-center gap-1 md:gap-2 px-2 py-1.5 md:px-3 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200 whitespace-nowrap"
                                     title="ลบข้อมูลทั้งหมดและยกเลิกประกาศ"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                                    ล้างข้อมูล
+                                    <span className="hidden sm:inline">ล้างข้อมูล</span>
                                 </button>
 
                                 {!isPublished && (
                                     <button 
                                         onClick={handlePublish}
-                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
+                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse whitespace-nowrap"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                                         บันทึกและประกาศ
@@ -1015,7 +1015,7 @@ const App: React.FC = () => {
                                 
                                 <button 
                                     onClick={() => setIsAdminManagerOpen(true)}
-                                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200"
+                                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200 whitespace-nowrap"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" x2="20" y1="8" y2="14"/><line x1="23" x2="17" y1="11" y2="11"/></svg>
                                     จัดการผู้ดูแล
@@ -1023,16 +1023,16 @@ const App: React.FC = () => {
                              </>
                          )}
 
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1.5 md:px-3 rounded-xl">
                             <span className="flex h-2 w-2 relative">
                               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPublished ? 'bg-green-400' : 'bg-amber-400'}`}></span>
                               <span className={`relative inline-flex rounded-full h-2 w-2 ${isPublished ? 'bg-green-500' : 'bg-amber-500'}`}></span>
                             </span>
-                            <span className="text-sm font-bold truncate max-w-[80px]">{currentUser || 'User'}</span>
+                            <span className="text-xs md:text-sm font-bold truncate max-w-[60px] md:max-w-[80px]">{currentUser || 'User'}</span>
                             <div className="w-px h-4 bg-slate-200 mx-1"></div>
                             <button 
                                 onClick={handleLogout}
-                                className="text-xs font-semibold hover:text-red-700 underline decoration-slate-300 hover:decoration-red-300 transition-all"
+                                className="text-xs font-semibold hover:text-red-700 underline decoration-slate-300 hover:decoration-red-300 transition-all whitespace-nowrap"
                             >
                                 ออก
                             </button>
@@ -1041,7 +1041,7 @@ const App: React.FC = () => {
                  ) : (
                     <button 
                         onClick={() => setIsLoginModalOpen(true)}
-                        className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-all text-sm font-semibold"
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-all text-xs md:text-sm font-semibold whitespace-nowrap"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         เข้าสู่ระบบ
@@ -1049,21 +1049,21 @@ const App: React.FC = () => {
                  )}
                </div>
 
-               <div className="h-10 w-px bg-slate-200 mx-2 hidden md:block"></div>
+               <div className="h-8 md:h-10 w-px bg-slate-200 mx-1 md:mx-2 hidden md:block"></div>
 
-               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl shrink-0">
+               <div className="flex items-center gap-1 md:gap-2 bg-slate-50 border border-slate-200 p-1 md:p-1.5 rounded-xl md:rounded-2xl shrink-0">
                   <button 
                       onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
+                      className="p-1.5 md:p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
                   >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                   </button>
-                  <span className="min-w-[140px] text-center font-bold text-lg text-slate-800">
+                  <span className="min-w-[100px] md:min-w-[140px] text-center font-bold text-sm md:text-lg text-slate-800">
                       {currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
                   </span>
                   <button 
                       onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
+                      className="p-1.5 md:p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
                   >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                   </button>
@@ -1073,12 +1073,12 @@ const App: React.FC = () => {
                <button 
                   onClick={handleExportPDF}
                   disabled={isExporting}
-                  className="flex items-center gap-3 px-4 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:shadow-sm border border-transparent hover:border-amber-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0 disabled:opacity-50"
+                  className="flex items-center gap-2 md:gap-3 px-3 py-1.5 md:px-4 md:py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:shadow-sm border border-transparent hover:border-amber-200 rounded-xl transition-all font-semibold text-xs md:text-sm md:text-base shrink-0 disabled:opacity-50 whitespace-nowrap"
                >
                   {isExporting ? (
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      <svg className="animate-spin h-4 w-4 md:h-5 md:w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                   ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-[18px] md:h-[18px]"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                   )}
                   <span className="hidden sm:inline">Export PDF</span>
                </button>
@@ -1086,9 +1086,9 @@ const App: React.FC = () => {
 
                <button 
                   onClick={() => setIsStatsOpen(true)}
-                  className="flex items-center gap-3 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:shadow-sm border border-transparent hover:border-indigo-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0"
+                  className="flex items-center gap-2 md:gap-3 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:shadow-sm border border-transparent hover:border-indigo-200 rounded-xl transition-all font-semibold text-xs md:text-sm md:text-base shrink-0 whitespace-nowrap"
                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-[18px] md:h-[18px]"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                   <span className="hidden sm:inline">สรุปภาระงาน</span>
                </button>
             </div>
@@ -1098,7 +1098,7 @@ const App: React.FC = () => {
         <main className="flex-1 flex flex-col min-h-0 relative">
           {!shouldShowContent && (
              <div className="absolute inset-0 z-10 bg-slate-50/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
-                 <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md">
+                 <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md mx-4">
                      <h3 className="text-xl font-bold text-slate-800 mb-2">ตารางเวรเดือนนี้อยู่ระหว่างการจัดทำ</h3>
                      <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode)</p>
                  </div>
@@ -1114,8 +1114,8 @@ const App: React.FC = () => {
               </div>
           )}
 
-          <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 flex items-center gap-4 md:gap-6 overflow-x-auto shrink-0 z-40 custom-scrollbar scrollbar-hide">
-             <div className="flex items-center mr-4 gap-2">
+          <div className="bg-white border-b border-slate-200 px-3 md:px-8 py-2 md:py-3 flex items-center gap-3 md:gap-6 overflow-x-auto shrink-0 z-40 custom-scrollbar scrollbar-hide">
+             <div className="flex items-center mr-2 md:mr-4 gap-2">
                  <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wide shrink-0">สถานะ:</span>
                  {isPublished ? (
                      <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">ประกาศแล้ว</span>
@@ -1134,8 +1134,9 @@ const App: React.FC = () => {
           <div className="flex-1 overflow-auto bg-white relative scroll-smooth scrollbar-hide">
               <div className="flex flex-col min-w-full">
                       <div className="flex w-full sticky top-0 z-40 shadow-sm bg-slate-50">
-                          <div className="sticky left-0 top-0 z-50 w-60 min-w-[15rem] px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)] flex items-center">
-                              รายชื่อเจ้าหน้าที่
+                          <div className="sticky left-0 top-0 z-50 w-28 min-w-[7rem] md:w-60 md:min-w-[15rem] px-2 py-3 md:px-4 md:py-4 text-left text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)] flex items-center">
+                              <span className="md:hidden">รายชื่อ</span>
+                              <span className="hidden md:inline">รายชื่อเจ้าหน้าที่</span>
                           </div>
                           {daysArray.map(day => {
                               const isSpecial = isWeekendOrHoliday(day);
@@ -1151,7 +1152,7 @@ const App: React.FC = () => {
                               const showEmptyWarning = isKikOrAdmin && !hasWorkingShifts;
 
                               return (
-                                  <div key={day} className={`relative flex-1 min-w-[28px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-rose-50/50' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
+                                  <div key={day} className={`relative flex-1 min-w-[34px] md:min-w-[44px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-rose-50/50' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
                                       <div className={`text-sm md:text-base font-bold 
                                         ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} 
                                         ${!isCurrentDay && showEmptyWarning ? 'text-red-600 scale-110 font-extrabold' : ''}
@@ -1159,7 +1160,7 @@ const App: React.FC = () => {
                                         ${!isCurrentDay && !showEmptyWarning && !isSpecial ? 'text-slate-700' : ''}`}>
                                         {day}
                                       </div>
-                                      <span className={`text-[10px] uppercase 
+                                      <span className={`text-[9px] md:text-[10px] uppercase 
                                         ${showEmptyWarning ? 'text-red-500 font-bold' : (isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400')}`}>
                                         {getDayLabel(day)}
                                       </span>
@@ -1173,20 +1174,20 @@ const App: React.FC = () => {
                                   </div>
                               );
                           })}
-                          <div className="w-20 min-w-[5rem] px-2 py-4 text-center text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">รวม</div>
+                          <div className="w-14 min-w-[3.5rem] md:w-20 md:min-w-[5rem] px-1 md:px-2 py-2 md:py-4 text-center text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">รวม</div>
                       </div>
 
                       {STAFF_LIST.map((staff, index) => (
                           <div key={staff.id} className={`flex w-full border-b border-slate-100 hover:bg-slate-50 transition-colors group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                              <div className="sticky left-0 z-30 w-60 min-w-[15rem] px-4 py-3 flex items-center gap-3 bg-white border-r border-slate-200 group-hover:bg-slate-50 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)]">
-                                  <div className="relative shrink-0"><img src={staff.avatarUrl} alt="" className="w-10 h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" /></div>
+                              <div className="sticky left-0 z-30 w-28 min-w-[7rem] md:w-60 md:min-w-[15rem] px-2 py-2 md:px-4 md:py-3 flex items-center gap-2 md:gap-3 bg-white border-r border-slate-200 group-hover:bg-slate-50 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)]">
+                                  <div className="relative shrink-0"><img src={staff.avatarUrl} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" /></div>
                                   <div className="truncate min-w-0 flex-1">
-                                      <div className="text-sm md:text-base font-bold text-slate-800 truncate">{staff.name}</div>
-                                      <div className="text-xs text-slate-500 truncate">{staff.role}</div>
+                                      <div className="text-xs md:text-base font-bold text-slate-800 truncate">{staff.name}</div>
+                                      <div className="hidden md:block text-xs text-slate-500 truncate">{staff.role}</div>
                                   </div>
                               </div>
                               {daysArray.map(day => renderCell(staff, day))}
-                              <div className="w-20 min-w-[5rem] px-2 py-2 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">{getStaffTotal(staff.id)}</div>
+                              <div className="w-14 min-w-[3.5rem] md:w-20 md:min-w-[5rem] px-1 md:px-2 py-2 flex items-center justify-center text-sm md:text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">{getStaffTotal(staff.id)}</div>
                           </div>
                       ))}
                       
