@@ -842,9 +842,18 @@ const App: React.FC = () => {
     );
   };
 
+  // Helper to filter assignments for the current month
+  const currentMonthAssignments = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const prefix = `${year}-${month}-`;
+    return assignments.filter(a => a.date.startsWith(prefix));
+  }, [assignments, currentDate]);
+
   const getStaffTotal = (staffId: string) => {
     if (!shouldShowContent) return 0;
-    return assignments.filter(a => a.staffId === staffId && a.shiftType !== ShiftType.OFF).length;
+    // Use filtered assignments for total count
+    return currentMonthAssignments.filter(a => a.staffId === staffId && a.shiftType !== ShiftType.OFF).length;
   };
 
   return (
@@ -1114,7 +1123,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={assignments} />
+      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={currentMonthAssignments} />
       {isLoggedIn && (<ShiftEditorModal isOpen={!!selectedCell} onClose={() => setSelectedCell(null)} selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null} selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null} currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF} onSave={handleSaveRequest} onInitiateSwap={initiateSwapFromModal} isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false} historyLogs={history} canManageShifts={isKikOrAdmin} />)}
       <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={handleConfirmSave} messages={conflictMessages} />
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLogin={handleLogin} />
