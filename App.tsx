@@ -573,18 +573,43 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    const sourceShifts = getShifts(source.staffId, source.day);
+    // Helper to normalize selection to the start of a combo
+    // If selecting Night, and it has a preceding Afternoon -> Normalize to Afternoon (Day-1)
+    const normalizeToComboStart = (coord: CellCoordinate) => {
+        const shifts = getShifts(coord.staffId, coord.day);
+        const hasNight = shifts.some(s => s.shiftType === ShiftType.NIGHT);
+        
+        if (hasNight) {
+            // Check Previous Day for Afternoon
+            const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+            const prevDateStr = formatDateToISO(prevDate);
+            const prevShifts = assignments.filter(a => a.staffId === coord.staffId && a.date === prevDateStr);
+            const hasPrevAfternoon = prevShifts.some(s => s.shiftType === ShiftType.AFTERNOON);
+            
+            if (hasPrevAfternoon) {
+                return { ...coord, day: coord.day - 1 };
+            }
+        }
+        return coord;
+    };
+
+    // Apply normalization: Force moving the Whole Block (B-D) even if user clicked 'D'
+    const normalizedSource = normalizeToComboStart(source);
+    const normalizedTarget = normalizeToComboStart(target);
+
+    // Continue with Normalized Coordinates
+    const sourceShifts = getShifts(normalizedSource.staffId, normalizedSource.day);
     const sourceAfternoon = sourceShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
     const sourceShiftToSwap = sourceAfternoon || sourceShifts[0];
     const sourceType = sourceShiftToSwap ? sourceShiftToSwap.shiftType : ShiftType.OFF;
 
-    const targetShifts = getShifts(target.staffId, target.day);
+    const targetShifts = getShifts(normalizedTarget.staffId, normalizedTarget.day);
     const targetAfternoon = targetShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
     const targetShiftToSwap = targetAfternoon || targetShifts[0];
     const targetType = targetShiftToSwap ? targetShiftToSwap.shiftType : ShiftType.OFF;
 
-    const sourceDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), source.day);
-    const targetDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), target.day);
+    const sourceDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), normalizedSource.day);
+    const targetDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), normalizedTarget.day);
     const sourceDateStr = formatDateToISO(sourceDateObj);
     const targetDateStr = formatDateToISO(targetDateObj);
 
@@ -598,18 +623,18 @@ const App: React.FC = () => {
     const sourceNextDateStr = formatDateToISO(sourceNextDate);
     const targetNextDateStr = formatDateToISO(targetNextDate);
 
-    const sourceNextShifts = assignments.filter(a => a.staffId === source.staffId && a.date === sourceNextDateStr);
+    const sourceNextShifts = assignments.filter(a => a.staffId === normalizedSource.staffId && a.date === sourceNextDateStr);
     const sourceHasNextNight = sourceNextShifts.some(s => s.shiftType === ShiftType.NIGHT);
 
-    const targetNextShifts = assignments.filter(a => a.staffId === target.staffId && a.date === targetNextDateStr);
+    const targetNextShifts = assignments.filter(a => a.staffId === normalizedTarget.staffId && a.date === targetNextDateStr);
     const targetHasNextNight = targetNextShifts.some(s => s.shiftType === ShiftType.NIGHT);
 
     let swapNight = false;
     if (sourceType === ShiftType.AFTERNOON && sourceHasNextNight) swapNight = true;
     if (targetType === ShiftType.AFTERNOON && targetHasNextNight) swapNight = true;
 
-    const sName = getStaffName(source.staffId);
-    const tName = getStaffName(target.staffId);
+    const sName = getStaffName(normalizedSource.staffId);
+    const tName = getStaffName(normalizedTarget.staffId);
 
     // New Log Formatting
     const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
@@ -632,23 +657,23 @@ const App: React.FC = () => {
     setAssignments(prev => {
         let nextAssignments = [...prev];
         if (sourceType !== ShiftType.OFF) {
-            const id = `${source.staffId}-${sourceDateStr}-${sourceType}`;
+            const id = `${normalizedSource.staffId}-${sourceDateStr}-${sourceType}`;
             nextAssignments = nextAssignments.filter(a => a.id !== id);
             deleteAssignmentFromDB(id);
         }
         if (targetType !== ShiftType.OFF) {
-            const id = `${target.staffId}-${targetDateStr}-${targetType}`;
+            const id = `${normalizedTarget.staffId}-${targetDateStr}-${targetType}`;
             nextAssignments = nextAssignments.filter(a => a.id !== id);
             deleteAssignmentFromDB(id);
         }
 
         if (targetType !== ShiftType.OFF) {
-            const newAssign = { id: `${source.staffId}-${sourceDateStr}-${targetType}`, staffId: source.staffId, date: sourceDateStr, shiftType: targetType };
+            const newAssign = { id: `${normalizedSource.staffId}-${sourceDateStr}-${targetType}`, staffId: normalizedSource.staffId, date: sourceDateStr, shiftType: targetType };
             nextAssignments.push(newAssign);
             saveAssignmentToDB(newAssign);
         }
         if (sourceType !== ShiftType.OFF) {
-             const newAssign = { id: `${target.staffId}-${targetDateStr}-${sourceType}`, staffId: target.staffId, date: targetDateStr, shiftType: sourceType };
+             const newAssign = { id: `${normalizedTarget.staffId}-${targetDateStr}-${sourceType}`, staffId: normalizedTarget.staffId, date: targetDateStr, shiftType: sourceType };
             nextAssignments.push(newAssign);
             saveAssignmentToDB(newAssign);
         }
@@ -658,23 +683,23 @@ const App: React.FC = () => {
             const tNextNightType = targetHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
 
             if (sNextNightType === ShiftType.NIGHT) {
-                 const id = `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`;
+                 const id = `${normalizedSource.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`;
                  nextAssignments = nextAssignments.filter(a => a.id !== id);
                  deleteAssignmentFromDB(id);
             }
             if (tNextNightType === ShiftType.NIGHT) {
-                 const id = `${target.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`;
+                 const id = `${normalizedTarget.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`;
                  nextAssignments = nextAssignments.filter(a => a.id !== id);
                  deleteAssignmentFromDB(id);
             }
 
             if (tNextNightType === ShiftType.NIGHT) {
-                const newAssign = { id: `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: source.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT };
+                const newAssign = { id: `${normalizedSource.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: normalizedSource.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT };
                 nextAssignments.push(newAssign);
                 saveAssignmentToDB(newAssign);
             }
             if (sNextNightType === ShiftType.NIGHT) {
-                const newAssign = { id: `${target.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`, staffId: target.staffId, date: targetNextDateStr, shiftType: ShiftType.NIGHT };
+                const newAssign = { id: `${normalizedTarget.staffId}-${targetNextDateStr}-${ShiftType.NIGHT}`, staffId: normalizedTarget.staffId, date: targetNextDateStr, shiftType: ShiftType.NIGHT };
                 nextAssignments.push(newAssign);
                 saveAssignmentToDB(newAssign);
             }
@@ -738,6 +763,38 @@ const App: React.FC = () => {
 
         setAssignments(prev => {
             let temp = removeGlobalShift(prev, targetDateStr, ShiftType.MORNING);
+            
+            // Cleanup Logic for Morning overwrite:
+            // If we overwrite a "Night" that was part of a B-D combo, we must delete the B (Afternoon)
+            // If we overwrite an "Afternoon" that was part of a B-D combo, we must delete the D (Night)
+            
+            // Check for linked Afternoon (if overwriting Night)
+            const prevDate = new Date(targetDate);
+            prevDate.setDate(targetDate.getDate() - 1);
+            const prevDateStr = formatDateToISO(prevDate);
+            const linkedAfternoon = temp.find(a => a.staffId === staffId && a.date === prevDateStr && a.shiftType === ShiftType.AFTERNOON);
+            
+            // Check if we are overwriting a Night shift on this day?
+            // (Wait, `removeGlobalShift` removed Morning, but didn't remove Night/Afternoon if they existed on this day yet)
+            // We need to check what existed BEFORE we add Morning.
+            const existingNight = assignments.find(a => a.staffId === staffId && a.date === targetDateStr && a.shiftType === ShiftType.NIGHT);
+            if (existingNight && linkedAfternoon) {
+                 // Removing the Night (by placing Morning) -> Remove the linked Afternoon
+                 temp = removeGlobalShift(temp, prevDateStr, ShiftType.AFTERNOON);
+            }
+            // Explicitly remove any existing Afternoon/Night on this day to make room for Morning
+            temp = removeGlobalShift(temp, targetDateStr, ShiftType.AFTERNOON);
+            temp = removeGlobalShift(temp, targetDateStr, ShiftType.NIGHT);
+            
+            // Check for linked Night (if overwriting Afternoon)
+            // If there WAS an Afternoon here before, check if it had a next Night
+            const existingAfternoon = assignments.find(a => a.staffId === staffId && a.date === targetDateStr && a.shiftType === ShiftType.AFTERNOON);
+            const linkedNight = temp.find(a => a.staffId === staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
+            if (existingAfternoon && linkedNight) {
+                 // Removing the Afternoon -> Remove the linked Night
+                 temp = removeGlobalShift(temp, nextDateStr, ShiftType.NIGHT);
+            }
+
             return updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.MORNING);
         });
     } else if (action === 'BD_COMBO') {
