@@ -716,6 +716,12 @@ const App: React.FC = () => {
         });
 
     } else if (action === 'MORNING') {
+        // Enforce Rule: No Morning shift on weekdays (non-holidays)
+        if (!isDateWeekendOrHoliday(targetDate)) {
+             alert("ไม่สามารถลงเวรเช้าในวันทำการได้ (อนุญาตเฉพาะวันหยุดและเสาร์-อาทิตย์)");
+             return;
+        }
+
         // REMOVED LOGGING FOR MORNING ASSIGNMENT
 
         setAssignments(prev => {
