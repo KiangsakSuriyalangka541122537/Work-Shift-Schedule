@@ -41,6 +41,24 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     }
   };
 
+  const calculateAmount = (staffId: string) => {
+    let sum = 0;
+    // Iterate only through valid days of the month
+    for(let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+        const dateStr = formatDateToISO(dateObj);
+        const shift = assignments.find(a => a.staffId === staffId && a.date === dateStr);
+        
+        if (shift) {
+            // Logic: Morning = 750, Afternoon-Night = 750 (so 375 each)
+            if (shift.shiftType === ShiftType.MORNING) sum += 750;
+            else if (shift.shiftType === ShiftType.AFTERNOON) sum += 375;
+            else if (shift.shiftType === ShiftType.NIGHT) sum += 375;
+        }
+    }
+    return sum.toLocaleString();
+  };
+
   const isWeekendOrHoliday = (day: number) => {
     if (day > daysInMonth) return false;
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
@@ -50,31 +68,8 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     return d === 0 || d === 6 || holidays.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
   };
 
-  return (
-    <div className="w-[297mm] h-[210mm] bg-white p-10 font-sans box-border relative text-black" style={{ color: '#000000' }}>
-      <style>{`
-        .print-table {
-          width: 100%;
-          border-collapse: collapse;
-          border: 1px solid #525252; /* Neutral-600: Softer than pure black */
-          color: #000000;
-        }
-        .print-table th, .print-table td {
-          border: 1px solid #737373; /* Neutral-500: Lighter inner borders */
-          padding: 8px 4px; /* Increased padding for spacing */
-          text-align: center;
-          vertical-align: middle;
-          height: 34px; /* Fixed row height for consistency */
-        }
-        .print-table th {
-          background-color: #f3f4f6; /* Gray-100 */
-          font-weight: bold;
-          padding: 10px 4px;
-        }
-        .print-text-sm {
-           font-size: 12px;
-        }
-      `}</style>
+  const PageLayout = ({ pageNumber }: { pageNumber: number }) => (
+    <div className="print-page w-[297mm] h-[210mm] bg-white p-10 font-sans box-border relative text-black mb-10" style={{ color: '#000000' }}>
       
       {/* Header */}
       <div className="text-center mb-8">
@@ -94,7 +89,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               <th style={{width: '45px'}}>ลำดับ<br/>ที่</th>
               <th style={{width: '180px'}}>ชื่อ – สกุล</th>
               <th colSpan={31} style={{padding: '6px'}}>วันที่ปฏิบัติงาน</th>
-              <th style={{width: '130px'}}>ลายเซ็น</th>
+              <th style={{width: '130px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
             </tr>
             <tr className="h-8">
               <th style={{backgroundColor: '#e5e7eb'}}></th>
@@ -127,7 +122,9 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     {getShiftCode(staff.id, day)}
                   </td>
                 ))}
-                <td></td>
+                <td style={{fontWeight: 'bold', fontSize: '13px'}}>
+                    {pageNumber === 2 ? calculateAmount(staff.id) : ""}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -137,6 +134,37 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
       <div className="mt-6 text-xs font-bold text-gray-700">
         หมายเหตุ : เวรบ่ายและดึก รวมกัน 750 บาท
       </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <style>{`
+        .print-table {
+          width: 100%;
+          border-collapse: collapse;
+          border: 1px solid #525252; /* Neutral-600 */
+          color: #000000;
+        }
+        .print-table th, .print-table td {
+          border: 1px solid #737373; /* Neutral-500 */
+          padding: 8px 4px; 
+          text-align: center;
+          vertical-align: middle;
+          height: 34px; 
+        }
+        .print-table th {
+          background-color: #f3f4f6;
+          font-weight: bold;
+          padding: 10px 4px;
+        }
+        .print-text-sm {
+           font-size: 12px;
+        }
+      `}</style>
+      
+      <PageLayout pageNumber={1} />
+      <PageLayout pageNumber={2} />
     </div>
   );
 };

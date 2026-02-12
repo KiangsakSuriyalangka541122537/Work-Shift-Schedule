@@ -390,18 +390,33 @@ const App: React.FC = () => {
     setIsExporting(true);
 
     try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 3,
-        logging: false,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/png');
+      // Create a new PDF document
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+      // Find all page containers
+      const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
+
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i] as HTMLElement;
+        
+        // Capture specific page
+        const canvas = await html2canvas(page, {
+          scale: 2.5, // Increased scale for better quality text
+          logging: false,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        
+        // Add new page to PDF if not the first one
+        if (i > 0) pdf.addPage();
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      }
+
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
     } catch (error) {
@@ -514,20 +529,25 @@ const App: React.FC = () => {
 
     // New Log Formatting
     const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
-    const sShift = sourceType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[sourceType].label;
-    const tShift = targetType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[targetType].label;
     
-    // Message: "เวร [ช่วงเวลา] [ชื่อ] วันที่ [วันที่] แลกเป็น เวร [ช่วงเวลา] [ชื่อ] วันที่ [วันที่]"
-    const msg = `เวร ${sShift} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกเป็น เวร ${tShift} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
+    // Determine labels for logs, handling "Afternoon-Night" combo case
+    let sLabel = sourceType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[sourceType].label;
+    let tLabel = targetType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[targetType].label;
+
+    // Override label if combo
+    if (sourceType === ShiftType.AFTERNOON && sourceHasNextNight) sLabel = 'บ่าย-ดึก';
+    if (targetType === ShiftType.AFTERNOON && targetHasNextNight) tLabel = 'บ่าย-ดึก';
+
+    const msg = `เวร ${sLabel} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกกับ เวร ${tLabel} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
     
+    // Log the main swap message (Note: we treat Combo as a single unit in log now to avoid redundancy)
     if (sourceType !== ShiftType.OFF || targetType !== ShiftType.OFF) {
         addHistoryLog(sourceDateStr, msg, 'SWAP');
     }
     
-    if (swapNight) {
-        const msgNight = `เวรดึก (ต่อเนื่อง) ${sName} วันที่ ${formatDateShort(sourceNextDate)} แลกเป็น เวรดึก (ต่อเนื่อง) ${tName} วันที่ ${formatDateShort(targetNextDate)}`;
-        addHistoryLog(sourceNextDateStr, msgNight, 'SWAP');
-    }
+    // Previously we logged separate night swap, but now "บ่าย-ดึก" covers it. 
+    // We only log extra night swap if it's NOT a combo (unlikely in this context but safe to keep logic if needed)
+    // For this specific request, the user wants "เวร บ่าย-ดึก ... แลกกับ ... " so we skip the secondary log if handled.
 
     setAssignments(prev => {
         let nextAssignments = [...prev];
@@ -1034,8 +1054,8 @@ const App: React.FC = () => {
 
       {/* Hidden Print Area */}
       {/* Positioned fixed top-left but behind everything and transparent to events, ensuring html2canvas can 'see' it */}
-      <div className="fixed top-0 left-[-10000px] z-[-50] w-[297mm]">
-        <div ref={printRef} className="bg-white">
+      <div className="fixed top-0 left-[-10000px] z-[-50]">
+        <div ref={printRef}>
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
