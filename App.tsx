@@ -82,10 +82,26 @@ const App: React.FC = () => {
       try {
         const monthKey = getMonthKey(currentDate);
 
-        // 1. Fetch Assignments (Live Data)
+        // Calculate Date Range: Fetch Current Month +/- 1 Month
+        // This supports cross-month shift calculations (incoming/outgoing) 
+        // while preventing loading the entire database history.
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+
+        // Start: 1st day of Previous Month
+        const startObj = new Date(year, month - 1, 1);
+        const startStr = formatDateToISO(startObj);
+
+        // End: Last day of Next Month
+        const endObj = new Date(year, month + 2, 0); 
+        const endStr = formatDateToISO(endObj);
+
+        // 1. Fetch Assignments (Live Data) - Scoped to relevant months
         const { data: shiftData, error: shiftError } = await supabase
           .from('Table-kik')
-          .select('*');
+          .select('*')
+          .gte('date', startStr)
+          .lte('date', endStr);
           
         if (shiftError) console.error('Error fetching assignments:', shiftError);
 
@@ -221,7 +237,8 @@ const App: React.FC = () => {
     try {
         const monthKey = getMonthKey(currentDate);
         
-        // Save current assignments as the "Original Snapshot"
+        // Save current assignments (within the fetched 3-month window) as the "Original Snapshot"
+        // This ensures the snapshot contains the relevant cross-month data for correct calculations
         const snapshot = [...assignments];
 
         const { error } = await supabase
