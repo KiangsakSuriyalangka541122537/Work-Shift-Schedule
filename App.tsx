@@ -390,23 +390,44 @@ const App: React.FC = () => {
     setIsExporting(true);
 
     try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 3,
-        logging: false,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+      const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
+
+      if (pages.length === 0) {
+        throw new Error("ไม่พบหน้าเอกสารที่จะพิมพ์ (No pages found)");
+      }
+
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i] as HTMLElement;
+        
+        // Ensure the element is visible for html2canvas to capture it
+        // html2canvas clones the document, so we don't need to change display here generally,
+        // but ensuring no display:none exists on parents helps.
+        
+        const canvas = await html2canvas(page, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          windowWidth: 1920, // Emulate desktop width to prevent responsive issues
+          windowHeight: 1080,
+          // x, y, width, height: explicitly define if needed, but page element should suffice
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      }
+
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Export failed:", error);
-      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
+      alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${error.message || "Unknown error"}`);
     } finally {
       setIsExporting(false);
     }
@@ -530,10 +551,6 @@ const App: React.FC = () => {
         addHistoryLog(sourceDateStr, msg, 'SWAP');
     }
     
-    // Previously we logged separate night swap, but now "บ่าย-ดึก" covers it. 
-    // We only log extra night swap if it's NOT a combo (unlikely in this context but safe to keep logic if needed)
-    // For this specific request, the user wants "เวร บ่าย-ดึก ... แลกกับ ... " so we skip the secondary log if handled.
-
     setAssignments(prev => {
         let nextAssignments = [...prev];
         if (sourceType !== ShiftType.OFF) {
@@ -786,11 +803,9 @@ const App: React.FC = () => {
 
             <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
                
-               {/* Login / Admin Section */}
                <div className="flex items-center gap-2">
                  {isLoggedIn ? (
                     <div className="flex items-center gap-2">
-                         {/* Manager Actions - Only Kik/Admin sees this */}
                          {isKikOrAdmin && (
                              <>
                                 <button 
@@ -893,16 +908,11 @@ const App: React.FC = () => {
         </header>
 
         <main className="flex-1 flex flex-col min-h-0 relative">
-          
-          {/* Draft Mode Notification for Non-Admins */}
           {!shouldShowContent && (
              <div className="absolute inset-0 z-10 bg-slate-50/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
                  <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md">
-                     <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M12 18l-3-3"/><path d="M12 18l3-3"/></svg>
-                     </div>
                      <h3 className="text-xl font-bold text-slate-800 mb-2">ตารางเวรเดือนนี้อยู่ระหว่างการจัดทำ</h3>
-                     <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode) <br/>ข้อมูลจะแสดงเมื่อมีการประกาศอย่างเป็นทางการแล้วเท่านั้น</p>
+                     <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode)</p>
                  </div>
              </div>
           )}
@@ -910,20 +920,9 @@ const App: React.FC = () => {
           {isSwapMode && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-lg bg-indigo-900/95 text-white px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-sm flex items-center justify-between animate-in slide-in-from-top-4 border border-indigo-500/50">
                   <div className="flex items-center gap-4">
-                      <div className="bg-indigo-500/30 p-3 rounded-full animate-pulse">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-                      </div>
-                      <div>
-                          <p className="font-bold text-base">โหมดสลับเวร</p>
-                          <p className="text-sm text-indigo-200">เลือกช่องปลายทางที่จะสลับ</p>
-                      </div>
+                      <p className="font-bold text-base">โหมดสลับเวร</p>
                   </div>
-                  <button 
-                      onClick={() => { setIsSwapMode(false); setSwapSource(null); }}
-                      className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20"
-                  >
-                      ยกเลิก
-                  </button>
+                  <button onClick={() => { setIsSwapMode(false); setSwapSource(null); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20">ยกเลิก</button>
               </div>
           )}
 
@@ -931,15 +930,9 @@ const App: React.FC = () => {
              <div className="flex items-center mr-4 gap-2">
                  <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wide shrink-0">สถานะ:</span>
                  {isPublished ? (
-                     <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                         ประกาศแล้ว
-                     </span>
+                     <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">ประกาศแล้ว</span>
                  ) : (
-                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                         ฉบับร่าง {isKikOrAdmin ? '(Admin Mode)' : '(รอประกาศ)'}
-                     </span>
+                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">ฉบับร่าง {isKikOrAdmin ? '(Admin Mode)' : '(รอประกาศ)'}</span>
                  )}
              </div>
              {Object.values(SHIFT_CONFIG).filter(c => c.code).map((config) => (
@@ -952,95 +945,53 @@ const App: React.FC = () => {
 
           <div className="flex-1 overflow-auto bg-white relative scroll-smooth scrollbar-hide">
               <div className="flex flex-col min-w-full">
-                  
                       <div className="flex w-full sticky top-0 z-40 shadow-sm bg-slate-50">
                           <div className="sticky left-0 top-0 z-50 w-60 min-w-[15rem] px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)] flex items-center">
                               รายชื่อเจ้าหน้าที่
                           </div>
-                          
                           {daysArray.map(day => {
                               const isSpecial = isWeekendOrHoliday(day);
-                              const hasWork = hasShiftsOnDay(day);
                               const isCurrentDay = isToday(day);
-
                               return (
                                   <div key={day} className={`relative flex-1 min-w-[28px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${isSpecial ? 'bg-rose-50/50' : ''} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
-                                      <div className={`
-                                        text-sm md:text-base font-bold
-                                        ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''}
-                                        ${!isCurrentDay && isSpecial ? 'text-rose-500' : ''}
-                                        ${!isCurrentDay && !isSpecial ? 'text-slate-700' : ''}
-                                      `}>
+                                      <div className={`text-sm md:text-base font-bold ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} ${!isCurrentDay && isSpecial ? 'text-rose-500' : ''} ${!isCurrentDay && !isSpecial ? 'text-slate-700' : ''}`}>
                                         {day}
                                       </div>
                                       <span className={`text-[10px] uppercase ${isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400'}`}>{getDayLabel(day)}</span>
-                                      
-                                      {isCurrentDay && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 rounded-full mb-0.5">วันนี้</span>}
-
-                                      {!hasWork && !isCurrentDay && shouldShowContent && (
-                                        <div className="absolute top-1 right-1" title="ยังไม่มีการจัดเวรในวันนี้">
-                                            <span className="flex h-1.5 w-1.5">
-                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-300"></span>
-                                            </span>
-                                        </div>
-                                      )}
                                   </div>
                               );
                           })}
-                          
-                          <div className="w-20 min-w-[5rem] px-2 py-4 text-center text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">
-                              รวม
-                          </div>
+                          <div className="w-20 min-w-[5rem] px-2 py-4 text-center text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">รวม</div>
                       </div>
 
                       {STAFF_LIST.map((staff, index) => (
                           <div key={staff.id} className={`flex w-full border-b border-slate-100 hover:bg-slate-50 transition-colors group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                              
                               <div className="sticky left-0 z-30 w-60 min-w-[15rem] px-4 py-3 flex items-center gap-3 bg-white border-r border-slate-200 group-hover:bg-slate-50 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)]">
-                                  <div className="relative shrink-0">
-                                    <img 
-                                      src={staff.avatarUrl} 
-                                      alt="" 
-                                      onError={(e) => {
-                                        e.currentTarget.src = `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(staff.name)}`;
-                                      }}
-                                      className="w-10 h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" 
-                                    />
-                                  </div>
+                                  <div className="relative shrink-0"><img src={staff.avatarUrl} alt="" className="w-10 h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" /></div>
                                   <div className="truncate min-w-0 flex-1">
                                       <div className="text-sm md:text-base font-bold text-slate-800 truncate">{staff.name}</div>
                                       <div className="text-xs text-slate-500 truncate">{staff.role}</div>
                                   </div>
                               </div>
-
                               {daysArray.map(day => renderCell(staff, day))}
-
-                              <div className="w-20 min-w-[5rem] px-2 py-2 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">
-                                  {getStaffTotal(staff.id)}
-                              </div>
+                              <div className="w-20 min-w-[5rem] px-2 py-2 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">{getStaffTotal(staff.id)}</div>
                           </div>
                       ))}
                       
-                      {/* Logs Section - Only visible if published */}
-                      {isPublished && (
-                        <div className="p-4 md:p-8 bg-slate-50/50">
-                            <ShiftLogList logs={history} />
-                        </div>
-                      )}
-
+                      {isPublished && (<div className="p-4 md:p-8 bg-slate-50/50"><ShiftLogList logs={history} /></div>)}
                       <div className="h-24 w-full shrink-0"></div>
               </div>
           </div>
-
         </main>
-      
       </div>
 
-      {/* Hidden Print Area */}
-      {/* Positioned fixed top-left but behind everything and transparent to events, ensuring html2canvas can 'see' it */}
-      <div className="fixed top-0 left-[-10000px] z-[-50] w-[297mm]">
-        <div ref={printRef} className="bg-white">
+      {/* 
+         HIDDEN PRINT AREA 
+         Updated Strategy: Position absolute with z-index to hide behind content.
+         Avoids opacity:0 or fixed positioning which can confuse html2canvas.
+      */}
+      <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -50, width: '297mm', pointerEvents: 'none' }}>
+        <div ref={printRef} style={{ width: '100%', backgroundColor: '#ffffff' }}>
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
@@ -1051,47 +1002,11 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <ShiftStats 
-        isOpen={isStatsOpen} 
-        onClose={() => setIsStatsOpen(false)}
-        staffList={STAFF_LIST}
-        assignments={assignments}
-      />
-
-      {/* Editor Modal is only accessible if logged in (controlled by handleCellClick, but safe to guard here too) */}
-      {isLoggedIn && (
-          <ShiftEditorModal 
-            isOpen={!!selectedCell}
-            onClose={() => setSelectedCell(null)}
-            selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null}
-            selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null}
-            currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF}
-            onSave={handleSaveRequest}
-            onInitiateSwap={initiateSwapFromModal}
-            isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false}
-            historyLogs={history}
-            canManageShifts={isKikOrAdmin}
-          />
-      )}
-
-      <ConfirmationModal 
-        isOpen={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
-        onConfirm={handleConfirmSave}
-        messages={conflictMessages}
-      />
-
-      <LoginModal 
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onLogin={handleLogin}
-      />
-
-      <AdminManagerModal 
-        isOpen={isAdminManagerOpen}
-        onClose={() => setIsAdminManagerOpen(false)}
-      />
-
+      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={assignments} />
+      {isLoggedIn && (<ShiftEditorModal isOpen={!!selectedCell} onClose={() => setSelectedCell(null)} selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null} selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null} currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF} onSave={handleSaveRequest} onInitiateSwap={initiateSwapFromModal} isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false} historyLogs={history} canManageShifts={isKikOrAdmin} />)}
+      <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={handleConfirmSave} messages={conflictMessages} />
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLogin={handleLogin} />
+      <AdminManagerModal isOpen={isAdminManagerOpen} onClose={() => setIsAdminManagerOpen(false)} />
     </div>
   );
 };
