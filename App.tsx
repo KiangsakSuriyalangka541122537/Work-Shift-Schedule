@@ -534,7 +534,7 @@ const App: React.FC = () => {
     setSelectedCell(clickedCoord);
   };
 
-  // Improved to allow coexistence of Morning and Night
+  // Improved to allow coexistence of Morning and Night, Afternoon and Night, etc.
   const updateAssignmentsWithRule = (
     currentAssignments: ShiftAssignment[], 
     staffId: string, 
@@ -559,48 +559,37 @@ const App: React.FC = () => {
 
     saveAssignmentToDB(newAssignment);
     
-    // Keep other shifts that don't conflict. 
-    // Logic: Morning and Night can coexist. Afternoon and Night cannot (on same day, usually). Morning and Afternoon cannot.
-    // However, simplest rule here for "Coexistence":
-    // 1. If adding MORNING, remove MORNING (if any) but KEEP NIGHT/AFTERNOON? (Usually Morning conflicts with Afternoon, but not Night)
-    // 2. If adding NIGHT, remove NIGHT (if any) but KEEP MORNING.
+    // Logic to keep compatible shifts:
+    // We want to be permissive.
+    // - NIGHT (00-08) is compatible with MORNING (08-16) and AFTERNOON (16-24).
+    // - MORNING conflicts with AFTERNOON (usually, unless double shift).
+    // - But essentially, we NEVER delete NIGHT unless explicitly removed (via OFF).
     
-    let assignmentsToKeep = currentAssignments.filter(a => !(a.staffId === staffId && a.date === dateStr)); // Default removes all on that day
-
-    if (newType === ShiftType.MORNING) {
-        // If adding Morning, we want to KEEP Night shifts if they exist (Coexistence)
-        // We only want to remove conflicting Morning or Afternoon
-        assignmentsToKeep = currentAssignments.filter(a => {
-            if (a.staffId !== staffId || a.date !== dateStr) return true;
-            // On the same day: Keep Night. Remove others.
-            return a.shiftType === ShiftType.NIGHT;
-        });
+    let assignmentsToKeep = currentAssignments.filter(a => {
+         if (a.staffId !== staffId || a.date !== dateStr) return true;
+         // On the same day logic:
+         if (newType === ShiftType.MORNING) {
+             // Keep Night. Remove Afternoon (Assuming M replaces A).
+             return a.shiftType === ShiftType.NIGHT;
+         } else if (newType === ShiftType.AFTERNOON) {
+             // Keep Night. Remove Morning (Assuming A replaces M).
+             return a.shiftType === ShiftType.NIGHT;
+         } else if (newType === ShiftType.NIGHT) {
+             // Keep Everything (Night doesn't overlap M or A).
+             return true; 
+         }
+         return false; // Default (e.g. OFF handles its own deletion logic before calling this, or falls here)
+    });
         
-        // Remove the ones we filtered out from DB
-        const assignmentsToRemove = currentAssignments.filter(a => {
-            if (a.staffId !== staffId || a.date !== dateStr) return false;
-            return a.shiftType !== ShiftType.NIGHT;
-        });
-        assignmentsToRemove.forEach(s => deleteAssignmentFromDB(s.id));
+    // Identify what to remove for DB sync
+    const assignmentsToRemove = currentAssignments.filter(a => {
+        if (a.staffId !== staffId || a.date !== dateStr) return false;
+        // If it's in assignmentsToKeep, don't remove.
+        const keeping = assignmentsToKeep.some(k => k.id === a.id);
+        return !keeping;
+    });
 
-    } else if (newType === ShiftType.NIGHT) {
-        // If adding Night, KEEP Morning.
-        assignmentsToKeep = currentAssignments.filter(a => {
-            if (a.staffId !== staffId || a.date !== dateStr) return true;
-            return a.shiftType === ShiftType.MORNING;
-        });
-         // Remove the ones we filtered out from DB
-        const assignmentsToRemove = currentAssignments.filter(a => {
-            if (a.staffId !== staffId || a.date !== dateStr) return false;
-            return a.shiftType !== ShiftType.MORNING;
-        });
-        assignmentsToRemove.forEach(s => deleteAssignmentFromDB(s.id));
-    } else {
-        // For Afternoon or Off, standard behavior (wipe day, basically)
-        // Actually, Afternoon might coexist with Morning? Usually not in this roster style.
-        // We'll stick to wiping the day for Afternoon to avoid clutter unless specified.
-        existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
-    }
+    assignmentsToRemove.forEach(s => deleteAssignmentFromDB(s.id));
 
     return [...assignmentsToKeep, newAssignment];
   };
@@ -608,10 +597,17 @@ const App: React.FC = () => {
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
     // Helper to normalize selection to the start of a combo
     // If selecting Night, check if it's part of a B-D combo from previous day
+    // UPDATE: If cell has Afternoon (Start of combo), prioritize that over Night (End of prev combo)
     const normalizeToComboStart = (coord: CellCoordinate) => {
         const shifts = getShifts(coord.staffId, coord.day);
+        const hasAfternoon = shifts.some(s => s.shiftType === ShiftType.AFTERNOON);
         const hasNight = shifts.some(s => s.shiftType === ShiftType.NIGHT);
         
+        // If it has Afternoon, treat this day as the Start of the Block. Do NOT look back.
+        if (hasAfternoon) {
+            return coord;
+        }
+
         if (hasNight) {
             // Check Previous Day for Afternoon
             const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
@@ -627,7 +623,7 @@ const App: React.FC = () => {
         return coord;
     };
 
-    // Apply normalization: Force moving the Whole Block (B-D) even if user clicked 'D'
+    // Apply normalization
     const normalizedSource = normalizeToComboStart(source);
     const normalizedTarget = normalizeToComboStart(target);
 
