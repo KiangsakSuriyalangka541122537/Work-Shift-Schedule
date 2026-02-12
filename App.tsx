@@ -1000,6 +1000,7 @@ const App: React.FC = () => {
                   </button>
                </div>
                
+               {isKikOrAdmin && (
                <button 
                   onClick={handleExportPDF}
                   disabled={isExporting}
@@ -1012,6 +1013,7 @@ const App: React.FC = () => {
                   )}
                   <span className="hidden sm:inline">Export PDF</span>
                </button>
+               )}
 
                <button 
                   onClick={() => setIsStatsOpen(true)}
