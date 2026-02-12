@@ -171,16 +171,34 @@ const App: React.FC = () => {
         if (deleteError) throw deleteError;
 
         // 2. Unpublish (Set back to draft) AND Clear Snapshot
+        // Try to update with original_assignments (assuming DB is updated)
+        const statusPayload: any = { 
+            month_key: monthKey, 
+            is_published: false,
+            published_by: currentUsername,
+            original_assignments: null 
+        };
+
         const { error: statusError } = await supabase
             .from('monthly_roster_status')
-            .upsert({ 
-                month_key: monthKey, 
-                is_published: false,
-                published_by: currentUsername,
-                original_assignments: null // Clear the snapshot
-            });
+            .upsert(statusPayload);
 
-        if (statusError) throw statusError;
+        // Fallback: If DB schema is old (missing column), try updating without original_assignments
+        if (statusError) {
+             if (statusError.message.includes("Could not find the 'original_assignments' column")) {
+                 console.warn("Schema mismatch: Falling back to legacy update (without original_assignments)");
+                 const { error: retryError } = await supabase
+                    .from('monthly_roster_status')
+                    .upsert({ 
+                        month_key: monthKey, 
+                        is_published: false,
+                        published_by: currentUsername
+                    });
+                 if (retryError) throw retryError;
+             } else {
+                 throw statusError;
+             }
+        }
 
         // Clear local state for this month & Set to Draft
         setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
@@ -215,14 +233,32 @@ const App: React.FC = () => {
                 original_assignments: snapshot // Save snapshot to DB
             });
 
-        if (error) throw error;
+        if (error) {
+            // Check for schema error
+            if (error.message.includes("Could not find the 'original_assignments' column")) {
+                 alert("ไม่สามารถบันทึก Snapshot ได้เนื่องจากฐานข้อมูลยังไม่อัปเดต\n\nระบบจะทำการประกาศเวรโดยไม่บันทึก Snapshot (PDF อาจเปลี่ยนตามการแก้ไขล่าสุด)\n\nกรุณารันไฟล์ db_setup.sql ใน Supabase เพื่อแก้ไขถาวร");
+                 
+                 // Fallback publish without snapshot
+                 const { error: retryError } = await supabase
+                    .from('monthly_roster_status')
+                    .upsert({ 
+                        month_key: monthKey, 
+                        is_published: true,
+                        published_by: currentUsername
+                    });
+                 
+                 if (retryError) throw retryError;
+            } else {
+                throw error;
+            }
+        }
         
         setIsPublished(true);
         setOriginalAssignments(snapshot); // Update local state
-        alert("ประกาศตารางเวรและบันทึกต้นฉบับเรียบร้อยแล้ว");
-    } catch (e) {
+        alert("ประกาศตารางเวรเรียบร้อยแล้ว");
+    } catch (e: any) {
         console.error("Publish failed", e);
-        alert("เกิดข้อผิดพลาดในการประกาศตารางเวร");
+        alert("เกิดข้อผิดพลาดในการประกาศตารางเวร: " + e.message);
     }
   };
 
