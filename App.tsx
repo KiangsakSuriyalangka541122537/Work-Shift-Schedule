@@ -1013,12 +1013,36 @@ const App: React.FC = () => {
                           {daysArray.map(day => {
                               const isSpecial = isWeekendOrHoliday(day);
                               const isCurrentDay = isToday(day);
+
+                              // Check if there are any working shifts (M, A, N) on this day across ALL staff
+                              // This is for Admin/Kik to see if they missed scheduling a day
+                              const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                              const dateStr = formatDateToISO(date);
+                              const hasWorkingShifts = assignments.some(a => a.date === dateStr && a.shiftType !== ShiftType.OFF);
+                              
+                              // Show warning if user is Admin/Kik AND day has no working shifts
+                              const showEmptyWarning = isKikOrAdmin && !hasWorkingShifts;
+
                               return (
-                                  <div key={day} className={`relative flex-1 min-w-[28px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${isSpecial ? 'bg-rose-50/50' : ''} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
-                                      <div className={`text-sm md:text-base font-bold ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} ${!isCurrentDay && isSpecial ? 'text-rose-500' : ''} ${!isCurrentDay && !isSpecial ? 'text-slate-700' : ''}`}>
+                                  <div key={day} className={`relative flex-1 min-w-[28px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-rose-50/50' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
+                                      <div className={`text-sm md:text-base font-bold 
+                                        ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} 
+                                        ${!isCurrentDay && showEmptyWarning ? 'text-red-600 scale-110 font-extrabold' : ''}
+                                        ${!isCurrentDay && !showEmptyWarning && isSpecial ? 'text-rose-500' : ''} 
+                                        ${!isCurrentDay && !showEmptyWarning && !isSpecial ? 'text-slate-700' : ''}`}>
                                         {day}
                                       </div>
-                                      <span className={`text-[10px] uppercase ${isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400'}`}>{getDayLabel(day)}</span>
+                                      <span className={`text-[10px] uppercase 
+                                        ${showEmptyWarning ? 'text-red-500 font-bold' : (isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400')}`}>
+                                        {getDayLabel(day)}
+                                      </span>
+                                      
+                                      {showEmptyWarning && (
+                                        <div className="absolute top-0 right-0 -mr-1 -mt-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping z-10" title="ยังไม่ได้จัดเวร"></div>
+                                      )}
+                                      {showEmptyWarning && (
+                                        <div className="absolute top-0 right-0 -mr-1 -mt-1 w-2.5 h-2.5 bg-red-500 rounded-full z-10 ring-2 ring-white"></div>
+                                      )}
                                   </div>
                               );
                           })}

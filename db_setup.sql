@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS public.shift_logs (
 );
 
 -- 5. ให้สิทธิ์การใช้งาน (Permissions)
+
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
