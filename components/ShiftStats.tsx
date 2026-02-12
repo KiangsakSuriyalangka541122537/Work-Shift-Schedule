@@ -1,33 +1,72 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { Staff, ShiftAssignment, ShiftType } from '../types';
+import { Staff, ShiftAssignment, ShiftType, formatDateToISO } from '../types';
 
 interface ShiftStatsProps {
   isOpen: boolean;
   onClose: () => void;
   staffList: Staff[];
-  assignments: ShiftAssignment[];
+  assignments: ShiftAssignment[]; // Full list
+  currentDate: Date;
 }
 
-export const ShiftStats: React.FC<ShiftStatsProps> = ({ isOpen, onClose, staffList, assignments }) => {
+export const ShiftStats: React.FC<ShiftStatsProps> = ({ isOpen, onClose, staffList, assignments, currentDate }) => {
   if (!isOpen) return null;
 
   const data = staffList.map(staff => {
-    const staffShifts = assignments.filter(a => a.staffId === staff.id);
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+    
+    // Filter shifts for the display columns (breakdown)
+    const staffShiftsThisMonth = assignments.filter(a => a.staffId === staff.id && a.date.startsWith(monthPrefix));
     
     // Calculate Weighted Total: M=1, A=0.5, N=0.5
     let weightedTotal = 0;
-    staffShifts.forEach(s => {
+    staffShiftsThisMonth.forEach(s => {
         if (s.shiftType === ShiftType.MORNING) weightedTotal += 1;
         else if (s.shiftType === ShiftType.AFTERNOON) weightedTotal += 0.5;
         else if (s.shiftType === ShiftType.NIGHT) weightedTotal += 0.5;
     });
 
+    // Cross-Month Logic:
+    const lastDayObj = new Date(year, month + 1, 0);
+    const lastDayStr = formatDateToISO(lastDayObj);
+    const nextMonthFirstObj = new Date(year, month + 1, 1);
+    const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+    
+    const prevMonthLastDayObj = new Date(year, month, 0);
+    const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+    const currentMonthFirstObj = new Date(year, month, 1);
+    const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+
+    // Outgoing: Afternoon (End of Month) -> Night (Start of Next) => +0.5 to this month
+    const hasAfternoonLastDay = assignments.some(a => 
+        a.staffId === staff.id && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON
+    );
+    const hasNightNextDay = assignments.some(a => 
+        a.staffId === staff.id && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT
+    );
+    if (hasAfternoonLastDay && hasNightNextDay) {
+        weightedTotal += 0.5;
+    }
+
+    // Incoming: Afternoon (End of Prev) -> Night (Start of This) => -0.5 from this month (Night counts as 0)
+    const hasAfternoonPrevMonth = assignments.some(a => 
+        a.staffId === staff.id && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON
+    );
+    const hasNightFirstDay = assignments.some(a => 
+        a.staffId === staff.id && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT
+    );
+    if (hasAfternoonPrevMonth && hasNightFirstDay) {
+        weightedTotal -= 0.5;
+    }
+
     return {
       name: staff.name,
-      เช้า: staffShifts.filter(s => s.shiftType === ShiftType.MORNING).length,
-      บ่าย: staffShifts.filter(s => s.shiftType === ShiftType.AFTERNOON).length,
-      ดึก: staffShifts.filter(s => s.shiftType === ShiftType.NIGHT).length,
+      เช้า: staffShiftsThisMonth.filter(s => s.shiftType === ShiftType.MORNING).length,
+      บ่าย: staffShiftsThisMonth.filter(s => s.shiftType === ShiftType.AFTERNOON).length,
+      ดึก: staffShiftsThisMonth.filter(s => s.shiftType === ShiftType.NIGHT).length,
       total: weightedTotal // Use weighted total instead of raw count
     };
   });

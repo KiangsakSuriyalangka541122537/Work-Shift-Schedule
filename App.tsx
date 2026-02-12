@@ -862,35 +862,40 @@ const App: React.FC = () => {
             else if (s.shiftType === ShiftType.NIGHT) sum += 0.5;
     });
 
-    // 2. Cross-Month Logic (Afternoon Last Day + Night 1st Next Month)
-    // This ensures the "B-D" combo spanning months counts as 1 full point in the month the "B" occurred (the current month).
-    
+    // 2. Cross-Month Logic
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth(); // 0-indexed
     
-    // Last day of current month
     const lastDayObj = new Date(year, month + 1, 0);
     const lastDayStr = formatDateToISO(lastDayObj);
-    
-    // First day of next month
     const nextMonthFirstObj = new Date(year, month + 1, 1);
     const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+    
+    const prevMonthLastDayObj = new Date(year, month, 0);
+    const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+    const currentMonthFirstObj = new Date(year, month, 1);
+    const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
 
-    // We need to look at the global 'assignments' state for these specific dates
+    // Outgoing: Afternoon (End of Month) -> Night (Start of Next) => +0.5 to this month
     const hasAfternoonLastDay = assignments.some(a => 
-        a.staffId === staffId && 
-        a.date === lastDayStr && 
-        a.shiftType === ShiftType.AFTERNOON
+        a.staffId === staffId && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON
     );
-
     const hasNightNextDay = assignments.some(a => 
-        a.staffId === staffId && 
-        a.date === nextMonthFirstStr && 
-        a.shiftType === ShiftType.NIGHT
+        a.staffId === staffId && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT
     );
-
     if (hasAfternoonLastDay && hasNightNextDay) {
         sum += 0.5;
+    }
+
+    // Incoming: Afternoon (End of Prev) -> Night (Start of This) => -0.5 from this month (Night counts as 0)
+    const hasAfternoonPrevMonth = assignments.some(a => 
+        a.staffId === staffId && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON
+    );
+    const hasNightFirstDay = assignments.some(a => 
+        a.staffId === staffId && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT
+    );
+    if (hasAfternoonPrevMonth && hasNightFirstDay) {
+        sum -= 0.5;
     }
 
     // Return integer if possible, else 1 decimal
@@ -1114,7 +1119,7 @@ const App: React.FC = () => {
                           </div>
                       ))}
                       
-                      {isPublished && (<div className="p-4 md:p-8 bg-slate-50/50"><ShiftLogList logs={history} /></div>)}
+                      {isPublished && <ShiftLogList logs={history} />}
                       <div className="h-24 w-full shrink-0"></div>
               </div>
           </div>
@@ -1164,7 +1169,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={currentMonthAssignments} />
+      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={assignments} currentDate={currentDate} />
       {isLoggedIn && (<ShiftEditorModal isOpen={!!selectedCell} onClose={() => setSelectedCell(null)} selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null} selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null} currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF} onSave={handleSaveRequest} onInitiateSwap={initiateSwapFromModal} isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false} historyLogs={history} canManageShifts={isKikOrAdmin} />)}
       <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={handleConfirmSave} messages={conflictMessages} />
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLogin={handleLogin} />

@@ -45,8 +45,8 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     }
   };
 
-  // Helper to check for Cross-Month Combo (Afternoon on Last Day + Night on Next Month 1st Day)
-  const isCrossMonthCombo = (staffId: string) => {
+  // Helper to check for Outgoing Cross-Month Combo (Afternoon on Last Day + Night on Next Month 1st Day)
+  const isOutgoingCrossMonthCombo = (staffId: string) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
@@ -73,6 +73,34 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     return hasAfternoonLastDay && hasNightNextDay;
   };
 
+  // Helper to check for Incoming Cross-Month Combo (Night on 1st Day + Afternoon on Prev Month Last Day)
+  const isIncomingCrossMonthCombo = (staffId: string) => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    // Last day of PREV month
+    const prevMonthLastDayObj = new Date(year, month, 0); 
+    const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+
+    // First day of CURRENT month
+    const currentMonthFirstObj = new Date(year, month, 1);
+    const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+
+    const hasAfternoonPrevLastDay = assignments.some(a =>
+        a.staffId === staffId &&
+        a.date === prevMonthLastDayStr &&
+        a.shiftType === ShiftType.AFTERNOON
+    );
+
+    const hasNightFirstDay = assignments.some(a =>
+        a.staffId === staffId &&
+        a.date === currentMonthFirstStr &&
+        a.shiftType === ShiftType.NIGHT
+    );
+
+    return hasAfternoonPrevLastDay && hasNightFirstDay;
+  };
+
   const calculateAmount = (staffId: string) => {
     let sum = 0;
     // Iterate only through valid days of the month to calculate sum
@@ -93,11 +121,14 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         }
     }
 
-    // Check Cross-Month Logic
-    // If Staff has Afternoon on Last Day AND Night on Next Month 1st Day
-    // Add the value of the Night shift (375) to THIS month
-    if (isCrossMonthCombo(staffId)) {
+    // Outgoing Combo: Add 375 (Night money) to THIS month
+    if (isOutgoingCrossMonthCombo(staffId)) {
         sum += 375;
+    }
+
+    // Incoming Combo: Subtract 375 (Night money) from THIS month (counts as 0)
+    if (isIncomingCrossMonthCombo(staffId)) {
+        sum -= 375;
     }
 
     return sum.toLocaleString();
@@ -120,11 +151,14 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         }
     }
 
-    // Check Cross-Month Logic
-    // If Cross-Month Combo exists, add 0.5 (representing the Night shift of next month)
-    // to make the total for that sequence = 1.0 in THIS month.
-    if (isCrossMonthCombo(staffId)) {
+    // Outgoing Combo: Add 0.5 (Night shift of next month) to THIS month
+    if (isOutgoingCrossMonthCombo(staffId)) {
         count += 0.5;
+    }
+
+    // Incoming Combo: Subtract 0.5 (Night shift of this month) because it counts as 0
+    if (isIncomingCrossMonthCombo(staffId)) {
+        count -= 0.5;
     }
 
     // Format: remove decimals if whole number
