@@ -23,7 +23,9 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
 
   const monthName = thaiMonths[currentDate.getMonth()];
   const buddhistYear = currentDate.getFullYear() + 543;
-  const daysArray = Array.from({ length: 31 }, (_, i) => i + 1); // Fixed 31 columns for table layout consistency
+  
+  // Dynamic days array based on daysInMonth (instead of fixed 31)
+  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   const getShiftCode = (staffId: string, day: number) => {
     // Hide data if day exceeds actual month length (e.g. Feb 30)
@@ -95,7 +97,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                 <tr className="h-10">
                     <th style={{width: '35px'}}>ลำดับ</th>
                     <th style={{width: '180px'}}>ชื่อ – สกุล</th>
-                    <th colSpan={31} style={{padding: '2px'}}>วันที่ปฏิบัติงาน</th>
+                    <th colSpan={daysInMonth} style={{padding: '2px'}}>วันที่ปฏิบัติงาน</th>
                     {/* Dynamic Last Column Header */}
                     <th style={{width: '100px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
                 </tr>
