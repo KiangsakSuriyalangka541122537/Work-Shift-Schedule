@@ -852,8 +852,49 @@ const App: React.FC = () => {
 
   const getStaffTotal = (staffId: string) => {
     if (!shouldShowContent) return 0;
-    // Use filtered assignments for total count
-    return currentMonthAssignments.filter(a => a.staffId === staffId && a.shiftType !== ShiftType.OFF).length;
+    
+    // 1. Calculate base sum within current view
+    let sum = 0;
+    // currentMonthAssignments is already filtered by date prefix in useMemo
+    currentMonthAssignments.filter(a => a.staffId === staffId).forEach(s => {
+            if (s.shiftType === ShiftType.MORNING) sum += 1;
+            else if (s.shiftType === ShiftType.AFTERNOON) sum += 0.5;
+            else if (s.shiftType === ShiftType.NIGHT) sum += 0.5;
+    });
+
+    // 2. Cross-Month Logic (Afternoon Last Day + Night 1st Next Month)
+    // This ensures the "B-D" combo spanning months counts as 1 full point in the month the "B" occurred (the current month).
+    
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth(); // 0-indexed
+    
+    // Last day of current month
+    const lastDayObj = new Date(year, month + 1, 0);
+    const lastDayStr = formatDateToISO(lastDayObj);
+    
+    // First day of next month
+    const nextMonthFirstObj = new Date(year, month + 1, 1);
+    const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+
+    // We need to look at the global 'assignments' state for these specific dates
+    const hasAfternoonLastDay = assignments.some(a => 
+        a.staffId === staffId && 
+        a.date === lastDayStr && 
+        a.shiftType === ShiftType.AFTERNOON
+    );
+
+    const hasNightNextDay = assignments.some(a => 
+        a.staffId === staffId && 
+        a.date === nextMonthFirstStr && 
+        a.shiftType === ShiftType.NIGHT
+    );
+
+    if (hasAfternoonLastDay && hasNightNextDay) {
+        sum += 0.5;
+    }
+
+    // Return integer if possible, else 1 decimal
+    return sum % 1 === 0 ? sum : sum.toFixed(1);
   };
 
   return (

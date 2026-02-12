@@ -34,8 +34,8 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
   
   // Use helper to ensure matching key format
   const dateStr = formatDateToISO(selectedDate);
-  // Filter relevant history - effectively mostly swaps now
-  const relevantHistory = historyLogs.filter(log => log.targetDate === dateStr);
+  // Filter relevant history - Show ONLY 'SWAP' logs to avoid showing Admin setup history
+  const relevantHistory = historyLogs.filter(log => log.targetDate === dateStr && log.actionType === 'SWAP');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">

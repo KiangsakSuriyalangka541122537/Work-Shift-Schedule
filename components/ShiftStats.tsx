@@ -14,12 +14,21 @@ export const ShiftStats: React.FC<ShiftStatsProps> = ({ isOpen, onClose, staffLi
 
   const data = staffList.map(staff => {
     const staffShifts = assignments.filter(a => a.staffId === staff.id);
+    
+    // Calculate Weighted Total: M=1, A=0.5, N=0.5
+    let weightedTotal = 0;
+    staffShifts.forEach(s => {
+        if (s.shiftType === ShiftType.MORNING) weightedTotal += 1;
+        else if (s.shiftType === ShiftType.AFTERNOON) weightedTotal += 0.5;
+        else if (s.shiftType === ShiftType.NIGHT) weightedTotal += 0.5;
+    });
+
     return {
       name: staff.name,
       เช้า: staffShifts.filter(s => s.shiftType === ShiftType.MORNING).length,
       บ่าย: staffShifts.filter(s => s.shiftType === ShiftType.AFTERNOON).length,
       ดึก: staffShifts.filter(s => s.shiftType === ShiftType.NIGHT).length,
-      total: staffShifts.length
+      total: weightedTotal // Use weighted total instead of raw count
     };
   });
 
@@ -56,6 +65,15 @@ export const ShiftStats: React.FC<ShiftStatsProps> = ({ isOpen, onClose, staffLi
                 <Bar dataKey="ดึก" stackId="a" fill="#a855f7" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+               {data.map((item) => (
+                   <div key={item.name} className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
+                       <div className="text-sm font-bold text-slate-700 truncate">{item.name}</div>
+                       <div className="text-2xl font-bold text-indigo-600 my-1">{item.total}</div>
+                       <div className="text-xs text-slate-400">เวรทั้งหมด</div>
+                   </div>
+               ))}
           </div>
         </div>
       </div>
