@@ -48,10 +48,6 @@ const App: React.FC = () => {
 
   const canEdit = useMemo(() => {
     if (!isLoggedIn) return false;
-
-    // เงื่อนไข: 
-    // 1. ถ้าประกาศแล้ว (isPublished = true) -> ทุกคนที่ล็อกอินแก้ไขได้ (เพื่อแลกเวร)
-    // 2. ถ้ายังไม่ประกาศ (Draft) -> เฉพาะ kik หรือ admin เท่านั้นที่แก้ได้
     if (isPublished) {
         return true;
     } else {
@@ -59,22 +55,15 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn, isKikOrAdmin, isPublished]);
 
-  // Visibility Logic: 
-  // If user is Admin/Kik -> Show everything
-  // If Published -> Show everything
-  // Else (Regular user + Draft mode) -> Show nothing
   const shouldShowContent = useMemo(() => {
       return isKikOrAdmin || isPublished;
   }, [isKikOrAdmin, isPublished]);
 
-  // Generate Month Key for DB (e.g., "2024-02")
   const getMonthKey = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   };
 
   // --- Supabase Integration ---
-
-  // Fetch Assignments, Status, and Logs on Load or Date Change
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -111,7 +100,7 @@ const App: React.FC = () => {
         const published = statusData?.is_published || false;
         setIsPublished(published);
 
-        // 3. Fetch History/Logs for this month
+        // 3. Fetch History/Logs
         const { data: logData, error: logError } = await supabase
             .from('shift_logs')
             .select('*')
@@ -144,7 +133,7 @@ const App: React.FC = () => {
   // Reset Month Action
   const handleResetMonth = async () => {
     if (!isKikOrAdmin) return;
-    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\n1. ข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร\n2. สถานะจะถูกเปลี่ยนกลับเป็น "ฉบับร่าง" (Draft) เพื่อให้คุณเริ่มจัดใหม่`);
+    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ...`);
     if (!confirm) return;
 
     try {
@@ -153,29 +142,18 @@ const App: React.FC = () => {
         const searchPattern = `${year}-${month}-%`;
         const monthKey = getMonthKey(currentDate);
 
-        // 1. Delete assignments
-        const { error: deleteError } = await supabase
-            .from('Table-kik')
-            .delete()
-            .like('date', searchPattern);
-
+        const { error: deleteError } = await supabase.from('Table-kik').delete().like('date', searchPattern);
         if (deleteError) throw deleteError;
 
-        // 2. Unpublish (Set back to draft)
-        const { error: statusError } = await supabase
-            .from('monthly_roster_status')
-            .upsert({ 
-                month_key: monthKey, 
-                is_published: false,
-                published_by: currentUsername
-            });
-
+        const { error: statusError } = await supabase.from('monthly_roster_status').upsert({ 
+            month_key: monthKey, 
+            is_published: false,
+            published_by: currentUsername
+        });
         if (statusError) throw statusError;
 
-        // Clear local state for this month & Set to Draft
         setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
         setIsPublished(false);
-        
         alert("ล้างข้อมูลและยกเลิกการประกาศเรียบร้อยแล้ว");
     } catch (e: any) {
         console.error("Reset failed", e);
@@ -183,10 +161,9 @@ const App: React.FC = () => {
     }
   };
 
-  // Publish Action
   const handlePublish = async () => {
     if (!isKikOrAdmin) return;
-    const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?\nหลังจากประกาศแล้ว เจ้าหน้าที่ท่านอื่นจะสามารถเข้ามาแก้ไขหรือแลกเปลี่ยนเวรได้");
+    const confirm = window.confirm("คุณต้องการบันทึกและประกาศตารางเวรเดือนนี้ใช่หรือไม่?...");
     if (!confirm) return;
 
     try {
@@ -208,7 +185,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper to sync changes to DB
   const saveAssignmentToDB = async (assignment: ShiftAssignment) => {
     try {
       const { error } = await supabase.from('Table-kik').upsert({
@@ -217,11 +193,7 @@ const App: React.FC = () => {
         date: assignment.date,
         shift_type: assignment.shiftType
       });
-      
-      if (error) {
-        console.error('Error saving to DB:', error);
-        alert(`เกิดข้อผิดพลาดในการบันทึกข้อมูล: ${error.message}`);
-      }
+      if (error) console.error('Error saving to DB:', error);
     } catch (error) {
       console.error('Unexpected error saving to DB:', error);
     }
@@ -230,17 +202,11 @@ const App: React.FC = () => {
   const deleteAssignmentFromDB = async (id: string) => {
     try {
       const { error } = await supabase.from('Table-kik').delete().eq('id', id);
-      
-      if (error) {
-        console.error('Error deleting from DB:', error);
-        alert(`เกิดข้อผิดพลาดในการลบข้อมูล: ${error.message}`);
-      }
+      if (error) console.error('Error deleting from DB:', error);
     } catch (error) {
       console.error('Unexpected error deleting from DB:', error);
     }
   };
-
-  // --- End Supabase Integration ---
 
   // Calendar Helpers
   const daysInMonth = useMemo(() => {
@@ -268,9 +234,7 @@ const App: React.FC = () => {
   const isDateWeekendOrHoliday = (date: Date) => {
     const dateStr = formatDateToISO(date);
     const d = date.getDay();
-    const isWeekend = d === 0 || d === 6;
-    const isHoliday = HOLIDAYS.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
-    return isWeekend || isHoliday;
+    return d === 0 || d === 6 || HOLIDAYS.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
   };
 
   const isToday = (day: number) => {
@@ -281,8 +245,7 @@ const App: React.FC = () => {
   };
 
   const getShifts = (staffId: string, day: number): ShiftAssignment[] => {
-    if (!shouldShowContent) return []; // Hide if not visible
-
+    if (!shouldShowContent) return [];
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateStr = formatDateToISO(date);
     return assignments.filter(a => a.staffId === staffId && a.date === dateStr);
@@ -294,8 +257,7 @@ const App: React.FC = () => {
   };
 
   const hasShiftsOnDay = (day: number) => {
-    if (!shouldShowContent) return false; // Hide if not visible
-
+    if (!shouldShowContent) return false;
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateStr = formatDateToISO(date);
     return assignments.some(a => a.date === dateStr && a.shiftType !== ShiftType.OFF);
@@ -304,10 +266,7 @@ const App: React.FC = () => {
   const getStaffName = (id: string) => STAFF_LIST.find(s => s.id === id)?.name || 'Unknown';
 
   const addHistoryLog = async (targetDate: string, message: string, actionType: ShiftHistory['actionType']) => {
-    // เงื่อนไขสำคัญ: จะเก็บ Log ก็ต่อเมื่อ admin: kik ทำการ "บันทึก/ประกาศ" แล้วเท่านั้น
-    // ถ้ายังเป็น Draft อยู่ ไม่ต้องเก็บ Log การเปลี่ยนแปลง
     if (!isPublished) return;
-
     const newLog: ShiftHistory = {
         id: Date.now().toString() + Math.random().toString(),
         timestamp: new Date(),
@@ -315,54 +274,31 @@ const App: React.FC = () => {
         message,
         actionType
     };
-    
-    // Optimistic Update
     setHistory(prev => [newLog, ...prev]);
-
     try {
         const monthKey = getMonthKey(currentDate);
-        const { error } = await supabase.from('shift_logs').insert({
+        await supabase.from('shift_logs').insert({
             month_key: monthKey,
             target_date: targetDate,
             message: message,
             action_type: actionType
         });
-        if (error) console.error("Error saving log", error);
     } catch (e) {
         console.error("Failed to save log", e);
     }
   };
 
-  // Auth Actions
   const handleLogin = async (username: string, password: string) => {
     try {
-        const { data, error } = await supabase
-            .from('users-table-kik') 
-            .select('*')
-            .eq('username', username)
-            .eq('password', password)
-            .single();
-
+        const { data, error } = await supabase.from('users-table-kik').select('*').eq('username', username).eq('password', password).single();
         if (!error && data) {
             setIsLoggedIn(true);
             setCurrentUser(data.name || username);
             setCurrentUsername(data.username);
             return { success: true };
         }
-    } catch (e) {
-        console.log("Database connection failed, using fallback.");
-    }
-
-    const demoUsers: Record<string, string> = {
-        'tor': 'พี่ต่อ',
-        'kik': 'พี่กิ๊ก',
-        'jhim': 'พี่จิ๋ม',
-        'pan': 'น้องปาน',
-        'top': 'พี่ท๊อป',
-        'team': 'พี่ทีม',
-        'admin': 'Admin'
-    };
-
+    } catch (e) { }
+    const demoUsers: Record<string, string> = { 'tor': 'พี่ต่อ', 'kik': 'พี่กิ๊ก', 'jhim': 'พี่จิ๋ม', 'pan': 'น้องปาน', 'top': 'พี่ท๊อป', 'team': 'พี่ทีม', 'admin': 'Admin' };
     if (demoUsers[username]) {
          if (password === username || (username === 'admin' && password === '1234')) {
              setIsLoggedIn(true);
@@ -371,7 +307,6 @@ const App: React.FC = () => {
              return { success: true };
          }
     }
-
     return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
   };
 
@@ -388,41 +323,26 @@ const App: React.FC = () => {
   const handleExportPDF = async () => {
     if (!printRef.current) return;
     setIsExporting(true);
-
     try {
-      // Create a new PDF document
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      // Find all page containers
-      // We search specifically within our printRef
       const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
 
-      if (pages.length === 0) {
-        throw new Error("ไม่พบหน้าเอกสารที่จะพิมพ์");
-      }
+      if (pages.length === 0) throw new Error("ไม่พบหน้าเอกสาร");
 
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
-        
-        // Capture specific page
-        // Use standard options for html2canvas
         const canvas = await html2canvas(page, {
-          scale: 2, // Use scale 2 for good balance
+          scale: 2,
           logging: false,
           useCORS: true,
           backgroundColor: '#ffffff'
         });
-
         const imgData = canvas.toDataURL('image/png');
-        
-        // Add new page to PDF if not the first one
         if (i > 0) pdf.addPage();
-        
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       }
-
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
     } catch (error: any) {
@@ -433,22 +353,14 @@ const App: React.FC = () => {
     }
   };
 
-  // Actions
   const handleCellClick = (staffId: string, day: number) => {
     if (!isLoggedIn) return; 
-
-    // Permission Check
     if (!canEdit) {
-        if (!isPublished) {
-            alert("ขออภัย: ตารางเวรเดือนนี้ยังไม่ถูกประกาศ (Draft Mode) \nคุณยังไม่สามารถเห็นหรือแก้ไขข้อมูลได้จนกว่า Admin จะกดประกาศ");
-        } else {
-            alert("คุณไม่มีสิทธิ์แก้ไขข้อมูลในขณะนี้");
-        }
+        if (!isPublished) alert("ขออภัย: ตารางเวรเดือนนี้ยังไม่ถูกประกาศ...");
+        else alert("คุณไม่มีสิทธิ์แก้ไขข้อมูลในขณะนี้");
         return;
     }
-
     const clickedCoord: CellCoordinate = { staffId, day };
-
     if (isSwapMode && swapSource) {
         performSwap(swapSource, clickedCoord);
         return;
@@ -456,28 +368,14 @@ const App: React.FC = () => {
     setSelectedCell(clickedCoord);
   };
 
-  const updateAssignmentsWithRule = (
-    currentAssignments: ShiftAssignment[], 
-    staffId: string, 
-    date: Date, 
-    newType: ShiftType
-  ): ShiftAssignment[] => {
+  const updateAssignmentsWithRule = (currentAssignments: ShiftAssignment[], staffId: string, date: Date, newType: ShiftType): ShiftAssignment[] => {
     const dateStr = formatDateToISO(date);
     const isSpecialDay = isDateWeekendOrHoliday(date);
-    
     const existingShifts = currentAssignments.filter(a => a.staffId === staffId && a.date === dateStr);
-    const hasThisType = existingShifts.some(a => a.shiftType === newType);
-    if (hasThisType) {
-        return currentAssignments; 
-    }
+    
+    if (existingShifts.some(a => a.shiftType === newType)) return currentAssignments; 
 
-    const newAssignment = {
-        id: `${staffId}-${dateStr}-${newType}`,
-        staffId,
-        date: dateStr,
-        shiftType: newType
-    };
-
+    const newAssignment = { id: `${staffId}-${dateStr}-${newType}`, staffId, date: dateStr, shiftType: newType };
     saveAssignmentToDB(newAssignment);
     const otherAssignments = currentAssignments.filter(a => !(a.staffId === staffId && a.date === dateStr));
 
@@ -485,9 +383,8 @@ const App: React.FC = () => {
         existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
         return [...otherAssignments, newAssignment];
     } else {
-        if (existingShifts.length < 2) {
-            return [...otherAssignments, ...existingShifts, newAssignment];
-        } else {
+        if (existingShifts.length < 2) return [...otherAssignments, ...existingShifts, newAssignment];
+        else {
             existingShifts.forEach(s => deleteAssignmentFromDB(s.id));
             return [...otherAssignments, newAssignment];
         }
@@ -510,21 +407,13 @@ const App: React.FC = () => {
     const sourceDateStr = formatDateToISO(sourceDateObj);
     const targetDateStr = formatDateToISO(targetDateObj);
 
-    const getNextDate = (d: Date) => {
-        const next = new Date(d);
-        next.setDate(d.getDate() + 1);
-        return next;
-    };
-    const sourceNextDate = getNextDate(sourceDateObj);
-    const targetNextDate = getNextDate(targetDateObj);
-    const sourceNextDateStr = formatDateToISO(sourceNextDate);
-    const targetNextDateStr = formatDateToISO(targetNextDate);
+    // Helpers to check Night shifts next day for combo logic
+    const getNextDate = (d: Date) => { const next = new Date(d); next.setDate(d.getDate() + 1); return next; };
+    const sourceNextDateStr = formatDateToISO(getNextDate(sourceDateObj));
+    const targetNextDateStr = formatDateToISO(getNextDate(targetDateObj));
 
-    const sourceNextShifts = assignments.filter(a => a.staffId === source.staffId && a.date === sourceNextDateStr);
-    const sourceHasNextNight = sourceNextShifts.some(s => s.shiftType === ShiftType.NIGHT);
-
-    const targetNextShifts = assignments.filter(a => a.staffId === target.staffId && a.date === targetNextDateStr);
-    const targetHasNextNight = targetNextShifts.some(s => s.shiftType === ShiftType.NIGHT);
+    const sourceHasNextNight = assignments.some(a => a.staffId === source.staffId && a.date === sourceNextDateStr && a.shiftType === ShiftType.NIGHT);
+    const targetHasNextNight = assignments.some(a => a.staffId === target.staffId && a.date === targetNextDateStr && a.shiftType === ShiftType.NIGHT);
 
     let swapNight = false;
     if (sourceType === ShiftType.AFTERNOON && sourceHasNextNight) swapNight = true;
@@ -532,31 +421,19 @@ const App: React.FC = () => {
 
     const sName = getStaffName(source.staffId);
     const tName = getStaffName(target.staffId);
-
-    // New Log Formatting
     const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     
-    // Determine labels for logs, handling "Afternoon-Night" combo case
     let sLabel = sourceType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[sourceType].label;
     let tLabel = targetType === ShiftType.OFF ? 'วันหยุด' : SHIFT_CONFIG[targetType].label;
-
-    // Override label if combo
     if (sourceType === ShiftType.AFTERNOON && sourceHasNextNight) sLabel = 'บ่าย-ดึก';
     if (targetType === ShiftType.AFTERNOON && targetHasNextNight) tLabel = 'บ่าย-ดึก';
 
     const msg = `เวร ${sLabel} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกกับ เวร ${tLabel} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
-    
-    // Log the main swap message (Note: we treat Combo as a single unit in log now to avoid redundancy)
-    if (sourceType !== ShiftType.OFF || targetType !== ShiftType.OFF) {
-        addHistoryLog(sourceDateStr, msg, 'SWAP');
-    }
-    
-    // Previously we logged separate night swap, but now "บ่าย-ดึก" covers it. 
-    // We only log extra night swap if it's NOT a combo (unlikely in this context but safe to keep logic if needed)
-    // For this specific request, the user wants "เวร บ่าย-ดึก ... แลกกับ ... " so we skip the secondary log if handled.
+    if (sourceType !== ShiftType.OFF || targetType !== ShiftType.OFF) addHistoryLog(sourceDateStr, msg, 'SWAP');
 
     setAssignments(prev => {
         let nextAssignments = [...prev];
+        // Remove old shifts
         if (sourceType !== ShiftType.OFF) {
             const id = `${source.staffId}-${sourceDateStr}-${sourceType}`;
             nextAssignments = nextAssignments.filter(a => a.id !== id);
@@ -567,7 +444,7 @@ const App: React.FC = () => {
             nextAssignments = nextAssignments.filter(a => a.id !== id);
             deleteAssignmentFromDB(id);
         }
-
+        // Add swapped shifts
         if (targetType !== ShiftType.OFF) {
             const newAssign = { id: `${source.staffId}-${sourceDateStr}-${targetType}`, staffId: source.staffId, date: sourceDateStr, shiftType: targetType };
             nextAssignments.push(newAssign);
@@ -578,11 +455,11 @@ const App: React.FC = () => {
             nextAssignments.push(newAssign);
             saveAssignmentToDB(newAssign);
         }
-
+        // Handle Combo Night Swaps
         if (swapNight) {
             const sNextNightType = sourceHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
             const tNextNightType = targetHasNextNight ? ShiftType.NIGHT : ShiftType.OFF;
-
+            
             if (sNextNightType === ShiftType.NIGHT) {
                  const id = `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`;
                  nextAssignments = nextAssignments.filter(a => a.id !== id);
@@ -593,7 +470,6 @@ const App: React.FC = () => {
                  nextAssignments = nextAssignments.filter(a => a.id !== id);
                  deleteAssignmentFromDB(id);
             }
-
             if (tNextNightType === ShiftType.NIGHT) {
                 const newAssign = { id: `${source.staffId}-${sourceNextDateStr}-${ShiftType.NIGHT}`, staffId: source.staffId, date: sourceNextDateStr, shiftType: ShiftType.NIGHT };
                 nextAssignments.push(newAssign);
@@ -615,13 +491,9 @@ const App: React.FC = () => {
   const executeSave = (action: string, staffId: string, day: number) => {
     const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const targetDateStr = formatDateToISO(targetDate);
-    
-    const nextDate = new Date(targetDate);
-    nextDate.setDate(targetDate.getDate() + 1);
+    const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
     const nextDateStr = formatDateToISO(nextDate);
     
-    // const staffName = getStaffName(staffId); // Not used anymore for logging
-
     const removeGlobalShift = (list: ShiftAssignment[], dStr: string, type: ShiftType) => {
         const toRemove = list.filter(a => a.date === dStr && a.shiftType === type);
         toRemove.forEach(a => deleteAssignmentFromDB(a.id));
@@ -630,8 +502,6 @@ const App: React.FC = () => {
 
     if (action === 'OFF') {
         const currentShifts = getShifts(staffId, day);
-        // REMOVED LOGGING FOR DELETE/REMOVE
-
         setAssignments(prev => {
             const toDelete = prev.filter(a => a.staffId === staffId && a.date === targetDateStr);
             toDelete.forEach(a => deleteAssignmentFromDB(a.id));
@@ -640,38 +510,26 @@ const App: React.FC = () => {
             currentShifts.forEach(shift => {
                  if (shift.shiftType === ShiftType.AFTERNOON) {
                     const linkedNight = newAssignments.find(a => a.staffId === staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
-                    if (linkedNight) {
-                        deleteAssignmentFromDB(linkedNight.id);
-                        newAssignments = newAssignments.filter(a => a.id !== linkedNight.id);
-                    }
+                    if (linkedNight) { deleteAssignmentFromDB(linkedNight.id); newAssignments = newAssignments.filter(a => a.id !== linkedNight.id); }
                  } else if (shift.shiftType === ShiftType.NIGHT) {
-                    const prevDate = new Date(targetDate);
-                    prevDate.setDate(targetDate.getDate() - 1);
+                    const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
                     const prevDateStr = formatDateToISO(prevDate);
                     const linkedAfternoon = newAssignments.find(a => a.staffId === staffId && a.date === prevDateStr && a.shiftType === ShiftType.AFTERNOON);
-                    if (linkedAfternoon) {
-                        deleteAssignmentFromDB(linkedAfternoon.id);
-                        newAssignments = newAssignments.filter(a => a.id !== linkedAfternoon.id);
-                    }
+                    if (linkedAfternoon) { deleteAssignmentFromDB(linkedAfternoon.id); newAssignments = newAssignments.filter(a => a.id !== linkedAfternoon.id); }
                  }
             });
             return newAssignments;
         });
 
     } else if (action === 'MORNING') {
-        // REMOVED LOGGING FOR MORNING ASSIGNMENT
-
         setAssignments(prev => {
             let temp = removeGlobalShift(prev, targetDateStr, ShiftType.MORNING);
             return updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.MORNING);
         });
     } else if (action === 'BD_COMBO') {
-        // REMOVED LOGGING FOR BD COMBO
-
         setAssignments(prev => {
             let temp = removeGlobalShift(prev, targetDateStr, ShiftType.AFTERNOON);
             temp = removeGlobalShift(temp, nextDateStr, ShiftType.NIGHT);
-            
             temp = updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.AFTERNOON);
             temp = updateAssignmentsWithRule(temp, staffId, nextDate, ShiftType.NIGHT);
             return temp;
@@ -681,8 +539,7 @@ const App: React.FC = () => {
 
   const handleSaveRequest = (action: string) => {
     if (!selectedCell) return;
-    const { staffId, day } = selectedCell;
-    executeSave(action, staffId, day);
+    executeSave(action, selectedCell.staffId, selectedCell.day);
     setSelectedCell(null);
   };
 
@@ -705,41 +562,24 @@ const App: React.FC = () => {
     const isSource = isSwapMode && swapSource?.staffId === staff.id && swapSource?.day === day;
     const isSpecial = isWeekendOrHoliday(day);
     const isCurrentDay = isToday(day);
-    
-    // Check permission for cursor
     const userCanInteract = isLoggedIn && canEdit;
-
     const order = { [ShiftType.MORNING]: 1, [ShiftType.AFTERNOON]: 2, [ShiftType.NIGHT]: 3, [ShiftType.OFF]: 4 };
     shifts.sort((a, b) => order[a.shiftType] - order[b.shiftType]);
 
     let content;
-    if (shifts.length === 0) {
-        content = null;
-    } else if (shifts.length === 1) {
+    if (shifts.length === 0) content = null;
+    else if (shifts.length === 1) {
         const config = SHIFT_CONFIG[shifts[0].shiftType];
-        content = (
-            <div className={`w-full h-full flex items-center justify-center ${config.colorBg}`}>
-                <span className={`font-bold text-base md:text-lg ${config.colorText}`}>{config.code}</span>
-            </div>
-        );
+        content = <div className={`w-full h-full flex items-center justify-center ${config.colorBg}`}><span className={`font-bold text-base md:text-lg ${config.colorText}`}>{config.code}</span></div>;
     } else {
-        content = (
-            <div className="w-full h-full flex flex-col">
-                {shifts.map((shift, idx) => {
-                    const config = SHIFT_CONFIG[shift.shiftType];
-                    return (
-                        <div key={idx} className={`flex-1 flex items-center justify-center ${config.colorBg} ${idx === 0 ? 'border-b border-white/50' : ''}`}>
-                             <span className={`font-bold text-xs ${config.colorText}`}>{config.code}</span>
-                        </div>
-                    )
-                })}
-            </div>
-        );
+        content = <div className="w-full h-full flex flex-col">{shifts.map((shift, idx) => {
+            const config = SHIFT_CONFIG[shift.shiftType];
+            return <div key={idx} className={`flex-1 flex items-center justify-center ${config.colorBg} ${idx === 0 ? 'border-b border-white/50' : ''}`}><span className={`font-bold text-xs ${config.colorText}`}>{config.code}</span></div>;
+        })}</div>;
     }
 
     const cursorClass = userCanInteract ? 'cursor-pointer hover:brightness-95' : 'cursor-default opacity-90';
     const swapClass = isSource ? 'ring-2 ring-primary ring-inset z-10 animate-pulse' : '';
-    
     let todayClass = isCurrentDay ? 'bg-emerald-50/40' : '';
     let todayShiftHighlight = '';
     let todayDotColor = 'bg-emerald-500';
@@ -748,37 +588,15 @@ const App: React.FC = () => {
     if (isCurrentDay && shifts.length > 0) {
          const type = shifts[0].shiftType;
          todayDotAnimate = 'animate-pulse';
-         if (type === ShiftType.MORNING) {
-             todayClass = 'bg-sky-50'; 
-             todayShiftHighlight = 'ring-4 ring-sky-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(56,189,248,0.3)]';
-             todayDotColor = 'bg-sky-500';
-         } else if (type === ShiftType.AFTERNOON) {
-             todayClass = 'bg-orange-50';
-             todayShiftHighlight = 'ring-4 ring-orange-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(251,146,60,0.3)]';
-             todayDotColor = 'bg-orange-500';
-         } else if (type === ShiftType.NIGHT) {
-             todayClass = 'bg-indigo-50';
-             todayShiftHighlight = 'ring-4 ring-indigo-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(129,140,248,0.3)]';
-             todayDotColor = 'bg-indigo-500';
-         }
+         if (type === ShiftType.MORNING) { todayClass = 'bg-sky-50'; todayShiftHighlight = 'ring-4 ring-sky-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(56,189,248,0.3)]'; todayDotColor = 'bg-sky-500'; }
+         else if (type === ShiftType.AFTERNOON) { todayClass = 'bg-orange-50'; todayShiftHighlight = 'ring-4 ring-orange-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(251,146,60,0.3)]'; todayDotColor = 'bg-orange-500'; }
+         else if (type === ShiftType.NIGHT) { todayClass = 'bg-indigo-50'; todayShiftHighlight = 'ring-4 ring-indigo-400 ring-inset z-20 shadow-[inset_0_0_15px_rgba(129,140,248,0.3)]'; todayDotColor = 'bg-indigo-500'; }
     }
 
     return (
-      <div 
-        key={`${staff.id}-${day}`}
-        onClick={() => handleCellClick(staff.id, day)}
-        className={`
-          h-16 flex-1 min-w-[28px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden
-          ${shifts.length === 0 && isSpecial ? 'bg-rose-50/40' : ''}
-          ${cursorClass}
-          ${swapClass}
-          ${todayClass}
-          ${todayShiftHighlight}
-        `}
-      >
-        {isCurrentDay && shifts.length > 0 && (
-            <div className={`absolute top-0.5 right-0.5 w-2.5 h-2.5 ${todayDotColor} ${todayDotAnimate} rounded-full shadow-sm z-30 ring-2 ring-white`}></div>
-        )}
+      <div key={`${staff.id}-${day}`} onClick={() => handleCellClick(staff.id, day)}
+        className={`h-16 flex-1 min-w-[28px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden ${shifts.length === 0 && isSpecial ? 'bg-rose-50/40' : ''} ${cursorClass} ${swapClass} ${todayClass} ${todayShiftHighlight}`}>
+        {isCurrentDay && shifts.length > 0 && (<div className={`absolute top-0.5 right-0.5 w-2.5 h-2.5 ${todayDotColor} ${todayDotAnimate} rounded-full shadow-sm z-30 ring-2 ring-white`}></div>)}
         {content}
       </div>
     );
@@ -793,6 +611,7 @@ const App: React.FC = () => {
     <div className="h-screen w-full bg-slate-50 flex flex-col items-center justify-center font-sans overflow-hidden text-slate-700">
       <div className="w-full h-full max-w-[1920px] bg-white shadow-2xl flex flex-col relative overflow-hidden border-x border-slate-200">
         
+        {/* Header Section */}
         <header className="bg-white z-50 px-4 md:px-8 py-4 border-b border-slate-200 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
             <div className="flex items-center gap-4">
@@ -806,43 +625,22 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
-               
-               {/* Login / Admin Section */}
                <div className="flex items-center gap-2">
                  {isLoggedIn ? (
                     <div className="flex items-center gap-2">
-                         {/* Manager Actions - Only Kik/Admin sees this */}
                          {isKikOrAdmin && (
                              <>
-                                <button 
-                                    onClick={handleResetMonth}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200"
-                                    title="ลบข้อมูลทั้งหมดและยกเลิกประกาศ"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                                    ล้างข้อมูล
-                                </button>
-
+                                <button onClick={handleResetMonth} className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-xl transition-all text-xs font-bold border border-red-200">ล้างข้อมูล</button>
                                 {!isPublished && (
-                                    <button 
-                                        onClick={handlePublish}
-                                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    <button onClick={handlePublish} className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-xl transition-all text-xs font-bold border border-green-200 animate-pulse">
                                         บันทึกและประกาศ
                                     </button>
                                 )}
-                                
-                                <button 
-                                    onClick={() => setIsAdminManagerOpen(true)}
-                                    className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" x2="20" y1="8" y2="14"/><line x1="23" x2="17" y1="11" y2="11"/></svg>
+                                <button onClick={() => setIsAdminManagerOpen(true)} className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all text-xs font-bold border border-indigo-200">
                                     จัดการผู้ดูแล
                                 </button>
                              </>
                          )}
-
                         <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl">
                             <span className="flex h-2 w-2 relative">
                               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPublished ? 'bg-green-400' : 'bg-amber-400'}`}></span>
@@ -850,62 +648,30 @@ const App: React.FC = () => {
                             </span>
                             <span className="text-sm font-bold truncate max-w-[80px]">{currentUser || 'User'}</span>
                             <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                            <button 
-                                onClick={handleLogout}
-                                className="text-xs font-semibold hover:text-red-700 underline decoration-slate-300 hover:decoration-red-300 transition-all"
-                            >
-                                ออก
-                            </button>
+                            <button onClick={handleLogout} className="text-xs font-semibold hover:text-red-700 underline decoration-slate-300 hover:decoration-red-300 transition-all">ออก</button>
                         </div>
                     </div>
                  ) : (
-                    <button 
-                        onClick={() => setIsLoginModalOpen(true)}
-                        className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-all text-sm font-semibold"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        เข้าสู่ระบบ
-                    </button>
+                    <button onClick={() => setIsLoginModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-all text-sm font-semibold">เข้าสู่ระบบ</button>
                  )}
                </div>
-
                <div className="h-10 w-px bg-slate-200 mx-2 hidden md:block"></div>
-
                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl shrink-0">
-                  <button 
-                      onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
-                  >
+                  <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600">
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                   </button>
                   <span className="min-w-[140px] text-center font-bold text-lg text-slate-800">
                       {currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
                   </span>
-                  <button 
-                      onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600"
-                  >
+                  <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="p-2 hover:bg-white hover:shadow-sm rounded-xl transition-all text-slate-600">
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                   </button>
                </div>
-               
-               <button 
-                  onClick={handleExportPDF}
-                  disabled={isExporting}
-                  className="flex items-center gap-3 px-4 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:shadow-sm border border-transparent hover:border-amber-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0 disabled:opacity-50"
-               >
-                  {isExporting ? (
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                  )}
+               <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-3 px-4 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:shadow-sm border border-transparent hover:border-amber-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0 disabled:opacity-50">
+                  {isExporting ? (<svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>) : (<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>)}
                   <span className="hidden sm:inline">Export PDF</span>
                </button>
-
-               <button 
-                  onClick={() => setIsStatsOpen(true)}
-                  className="flex items-center gap-3 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:shadow-sm border border-transparent hover:border-indigo-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0"
-               >
+               <button onClick={() => setIsStatsOpen(true)} className="flex items-center gap-3 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:shadow-sm border border-transparent hover:border-indigo-200 rounded-xl transition-all font-semibold text-sm md:text-base shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                   <span className="hidden sm:inline">สรุปภาระงาน</span>
                </button>
@@ -914,16 +680,11 @@ const App: React.FC = () => {
         </header>
 
         <main className="flex-1 flex flex-col min-h-0 relative">
-          
-          {/* Draft Mode Notification for Non-Admins */}
           {!shouldShowContent && (
              <div className="absolute inset-0 z-10 bg-slate-50/50 backdrop-blur-sm flex items-center justify-center pointer-events-none">
                  <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md">
-                     <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M12 18l-3-3"/><path d="M12 18l3-3"/></svg>
-                     </div>
                      <h3 className="text-xl font-bold text-slate-800 mb-2">ตารางเวรเดือนนี้อยู่ระหว่างการจัดทำ</h3>
-                     <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode) <br/>ข้อมูลจะแสดงเมื่อมีการประกาศอย่างเป็นทางการแล้วเท่านั้น</p>
+                     <p className="text-slate-500">ผู้ดูแลระบบกำลังจัดตารางเวร (Draft Mode)</p>
                  </div>
              </div>
           )}
@@ -931,20 +692,9 @@ const App: React.FC = () => {
           {isSwapMode && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-lg bg-indigo-900/95 text-white px-5 py-4 rounded-2xl shadow-2xl backdrop-blur-sm flex items-center justify-between animate-in slide-in-from-top-4 border border-indigo-500/50">
                   <div className="flex items-center gap-4">
-                      <div className="bg-indigo-500/30 p-3 rounded-full animate-pulse">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-                      </div>
-                      <div>
-                          <p className="font-bold text-base">โหมดสลับเวร</p>
-                          <p className="text-sm text-indigo-200">เลือกช่องปลายทางที่จะสลับ</p>
-                      </div>
+                      <p className="font-bold text-base">โหมดสลับเวร</p>
                   </div>
-                  <button 
-                      onClick={() => { setIsSwapMode(false); setSwapSource(null); }}
-                      className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20"
-                  >
-                      ยกเลิก
-                  </button>
+                  <button onClick={() => { setIsSwapMode(false); setSwapSource(null); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20">ยกเลิก</button>
               </div>
           )}
 
@@ -952,15 +702,9 @@ const App: React.FC = () => {
              <div className="flex items-center mr-4 gap-2">
                  <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wide shrink-0">สถานะ:</span>
                  {isPublished ? (
-                     <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                         ประกาศแล้ว
-                     </span>
+                     <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">ประกาศแล้ว</span>
                  ) : (
-                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                         ฉบับร่าง {isKikOrAdmin ? '(Admin Mode)' : '(รอประกาศ)'}
-                     </span>
+                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">ฉบับร่าง {isKikOrAdmin ? '(Admin Mode)' : '(รอประกาศ)'}</span>
                  )}
              </div>
              {Object.values(SHIFT_CONFIG).filter(c => c.code).map((config) => (
@@ -973,96 +717,54 @@ const App: React.FC = () => {
 
           <div className="flex-1 overflow-auto bg-white relative scroll-smooth scrollbar-hide">
               <div className="flex flex-col min-w-full">
-                  
                       <div className="flex w-full sticky top-0 z-40 shadow-sm bg-slate-50">
                           <div className="sticky left-0 top-0 z-50 w-60 min-w-[15rem] px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-r border-b border-slate-200 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)] flex items-center">
                               รายชื่อเจ้าหน้าที่
                           </div>
-                          
                           {daysArray.map(day => {
                               const isSpecial = isWeekendOrHoliday(day);
-                              const hasWork = hasShiftsOnDay(day);
                               const isCurrentDay = isToday(day);
-
                               return (
                                   <div key={day} className={`relative flex-1 min-w-[28px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${isSpecial ? 'bg-rose-50/50' : ''} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
-                                      <div className={`
-                                        text-sm md:text-base font-bold
-                                        ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''}
-                                        ${!isCurrentDay && isSpecial ? 'text-rose-500' : ''}
-                                        ${!isCurrentDay && !isSpecial ? 'text-slate-700' : ''}
-                                      `}>
+                                      <div className={`text-sm md:text-base font-bold ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} ${!isCurrentDay && isSpecial ? 'text-rose-500' : ''} ${!isCurrentDay && !isSpecial ? 'text-slate-700' : ''}`}>
                                         {day}
                                       </div>
                                       <span className={`text-[10px] uppercase ${isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400'}`}>{getDayLabel(day)}</span>
-                                      
-                                      {isCurrentDay && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 rounded-full mb-0.5">วันนี้</span>}
-
-                                      {!hasWork && !isCurrentDay && shouldShowContent && (
-                                        <div className="absolute top-1 right-1" title="ยังไม่มีการจัดเวรในวันนี้">
-                                            <span className="flex h-1.5 w-1.5">
-                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-300"></span>
-                                            </span>
-                                        </div>
-                                      )}
                                   </div>
                               );
                           })}
-                          
-                          <div className="w-20 min-w-[5rem] px-2 py-4 text-center text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">
-                              รวม
-                          </div>
+                          <div className="w-20 min-w-[5rem] px-2 py-4 text-center text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">รวม</div>
                       </div>
 
                       {STAFF_LIST.map((staff, index) => (
                           <div key={staff.id} className={`flex w-full border-b border-slate-100 hover:bg-slate-50 transition-colors group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                              
                               <div className="sticky left-0 z-30 w-60 min-w-[15rem] px-4 py-3 flex items-center gap-3 bg-white border-r border-slate-200 group-hover:bg-slate-50 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.02)]">
-                                  <div className="relative shrink-0">
-                                    <img 
-                                      src={staff.avatarUrl} 
-                                      alt="" 
-                                      onError={(e) => {
-                                        e.currentTarget.src = `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(staff.name)}`;
-                                      }}
-                                      className="w-10 h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" 
-                                    />
-                                  </div>
+                                  <div className="relative shrink-0"><img src={staff.avatarUrl} alt="" className="w-10 h-10 rounded-full bg-slate-200 object-cover ring-2 ring-white shadow-md" /></div>
                                   <div className="truncate min-w-0 flex-1">
                                       <div className="text-sm md:text-base font-bold text-slate-800 truncate">{staff.name}</div>
                                       <div className="text-xs text-slate-500 truncate">{staff.role}</div>
                                   </div>
                               </div>
-
                               {daysArray.map(day => renderCell(staff, day))}
-
-                              <div className="w-20 min-w-[5rem] px-2 py-2 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">
-                                  {getStaffTotal(staff.id)}
-                              </div>
+                              <div className="w-20 min-w-[5rem] px-2 py-2 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">{getStaffTotal(staff.id)}</div>
                           </div>
                       ))}
                       
-                      {/* Logs Section - Only visible if published */}
-                      {isPublished && (
-                        <div className="p-4 md:p-8 bg-slate-50/50">
-                            <ShiftLogList logs={history} />
-                        </div>
-                      )}
-
+                      {isPublished && (<div className="p-4 md:p-8 bg-slate-50/50"><ShiftLogList logs={history} /></div>)}
                       <div className="h-24 w-full shrink-0"></div>
               </div>
           </div>
-
         </main>
-      
       </div>
 
-      {/* Hidden Print Area */}
-      {/* Positioned fixed at 0,0 but transparent and behind everything (z-index: -50). */}
-      {/* This ensures html2canvas can capture it without "Unable to find element" errors caused by off-screen positioning. */}
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '297mm', zIndex: -50, opacity: 0, pointerEvents: 'none' }}>
-        <div ref={printRef} style={{ width: '100%' }}>
+      {/* 
+         HIDDEN PRINT AREA 
+         Crucial Fix: Use z-index -50 to hide it "visually" but keep it "visible" in DOM for html2canvas.
+         Opacity 0 causes issues with some renderers. 
+         Position absolute with explicit white background ensures clean capture.
+      */}
+      <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -50, width: '297mm', pointerEvents: 'none' }}>
+        <div ref={printRef} style={{ width: '100%', backgroundColor: 'white' }}>
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
@@ -1073,47 +775,11 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <ShiftStats 
-        isOpen={isStatsOpen} 
-        onClose={() => setIsStatsOpen(false)}
-        staffList={STAFF_LIST}
-        assignments={assignments}
-      />
-
-      {/* Editor Modal is only accessible if logged in (controlled by handleCellClick, but safe to guard here too) */}
-      {isLoggedIn && (
-          <ShiftEditorModal 
-            isOpen={!!selectedCell}
-            onClose={() => setSelectedCell(null)}
-            selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null}
-            selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null}
-            currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF}
-            onSave={handleSaveRequest}
-            onInitiateSwap={initiateSwapFromModal}
-            isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false}
-            historyLogs={history}
-            canManageShifts={isKikOrAdmin}
-          />
-      )}
-
-      <ConfirmationModal 
-        isOpen={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
-        onConfirm={handleConfirmSave}
-        messages={conflictMessages}
-      />
-
-      <LoginModal 
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onLogin={handleLogin}
-      />
-
-      <AdminManagerModal 
-        isOpen={isAdminManagerOpen}
-        onClose={() => setIsAdminManagerOpen(false)}
-      />
-
+      <ShiftStats isOpen={isStatsOpen} onClose={() => setIsStatsOpen(false)} staffList={STAFF_LIST} assignments={assignments} />
+      {isLoggedIn && (<ShiftEditorModal isOpen={!!selectedCell} onClose={() => setSelectedCell(null)} selectedStaff={selectedCell ? STAFF_LIST.find(s => s.id === selectedCell.staffId) || null : null} selectedDate={selectedCell ? new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedCell.day) : null} currentShiftType={selectedCell ? (getFirstShift(selectedCell.staffId, selectedCell.day)?.shiftType || ShiftType.OFF) : ShiftType.OFF} onSave={handleSaveRequest} onInitiateSwap={initiateSwapFromModal} isHoliday={selectedCell ? isWeekendOrHoliday(selectedCell.day) : false} historyLogs={history} canManageShifts={isKikOrAdmin} />)}
+      <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={handleConfirmSave} messages={conflictMessages} />
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLogin={handleLogin} />
+      <AdminManagerModal isOpen={isAdminManagerOpen} onClose={() => setIsAdminManagerOpen(false)} />
     </div>
   );
 };
