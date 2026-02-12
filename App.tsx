@@ -386,11 +386,7 @@ const App: React.FC = () => {
 
   // PDF Export
   const handleExportPDF = async () => {
-    if (!printRef.current) {
-        alert("ไม่พบข้อมูลสำหรับพิมพ์");
-        return;
-    }
-    
+    if (!printRef.current) return;
     setIsExporting(true);
 
     try {
@@ -400,31 +396,17 @@ const App: React.FC = () => {
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
       // Find all page containers
-      // We search specifically within our printRef
       const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
-
-      if (pages.length === 0) {
-        throw new Error("ไม่พบหน้าเอกสารที่จะพิมพ์ (No pages found)");
-      }
 
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         
         // Capture specific page
-        // Removed allowTaint: true as it causes SecurityError when calling toDataURL()
         const canvas = await html2canvas(page, {
-          scale: 2, // Use scale 2 for good balance of quality and performance
+          scale: 2.5, // Increased scale for better quality text
           logging: false,
-          useCORS: true, // Handle cross-origin images (like Google Fonts)
-          backgroundColor: '#ffffff',
-          windowWidth: 2000, // Simulate desktop width
-          onclone: (clonedDoc) => {
-             // Optional: Ensure elements are visible in clone if needed
-             const clonedPage = clonedDoc.querySelector('.print-page');
-             if (clonedPage) {
-                (clonedPage as HTMLElement).style.visibility = 'visible';
-             }
-          }
+          useCORS: true,
+          backgroundColor: '#ffffff'
         });
 
         const imgData = canvas.toDataURL('image/png');
@@ -437,11 +419,9 @@ const App: React.FC = () => {
 
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Export failed:", error);
-      // Fallback error message
-      const errMsg = error?.message || (typeof error === 'string' ? error : 'Unknown error');
-      alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${errMsg}`);
+      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
     } finally {
       setIsExporting(false);
     }
@@ -1073,10 +1053,9 @@ const App: React.FC = () => {
       </div>
 
       {/* Hidden Print Area */}
-      {/* Positioned absolute top-0 left-0 but hidden via opacity and z-index to ensure it renders for html2canvas */}
-      {/* We avoid 'fixed' or 'left: -9999px' which can sometimes cause rendering issues in canvas */}
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '297mm', zIndex: -50, opacity: 0, pointerEvents: 'none' }}>
-        <div ref={printRef} style={{ width: '100%' }}>
+      {/* Positioned fixed top-left but behind everything and transparent to events, ensuring html2canvas can 'see' it */}
+      <div className="fixed top-0 left-[-10000px] z-[-50]">
+        <div ref={printRef}>
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
