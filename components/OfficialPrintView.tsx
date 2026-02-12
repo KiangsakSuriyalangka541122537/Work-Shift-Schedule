@@ -45,6 +45,34 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     }
   };
 
+  // Helper to check for Cross-Month Combo (Afternoon on Last Day + Night on Next Month 1st Day)
+  const isCrossMonthCombo = (staffId: string) => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    // Last day of CURRENT month
+    const lastDayObj = new Date(year, month + 1, 0); 
+    const lastDayStr = formatDateToISO(lastDayObj);
+
+    // First day of NEXT month
+    const nextMonthFirstObj = new Date(year, month + 1, 1);
+    const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+
+    const hasAfternoonLastDay = assignments.some(a =>
+        a.staffId === staffId &&
+        a.date === lastDayStr &&
+        a.shiftType === ShiftType.AFTERNOON
+    );
+
+    const hasNightNextDay = assignments.some(a =>
+        a.staffId === staffId &&
+        a.date === nextMonthFirstStr &&
+        a.shiftType === ShiftType.NIGHT
+    );
+
+    return hasAfternoonLastDay && hasNightNextDay;
+  };
+
   const calculateAmount = (staffId: string) => {
     let sum = 0;
     // Iterate only through valid days of the month to calculate sum
@@ -64,7 +92,43 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             else if (shift.shiftType === ShiftType.NIGHT) sum += 375;
         }
     }
+
+    // Check Cross-Month Logic
+    // If Staff has Afternoon on Last Day AND Night on Next Month 1st Day
+    // Add the value of the Night shift (375) to THIS month
+    if (isCrossMonthCombo(staffId)) {
+        sum += 375;
+    }
+
     return sum.toLocaleString();
+  };
+
+  const calculateShiftCount = (staffId: string) => {
+    let count = 0;
+    for(let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+        const dateStr = formatDateToISO(dateObj);
+        const shift = assignments.find(a => a.staffId === staffId && a.date === dateStr);
+        
+        if (shift) {
+            // Logic:
+            // Morning = 1 shift
+            // Afternoon + Night = 1 shift (So 0.5 each)
+            if (shift.shiftType === ShiftType.MORNING) count += 1;
+            else if (shift.shiftType === ShiftType.AFTERNOON) count += 0.5;
+            else if (shift.shiftType === ShiftType.NIGHT) count += 0.5;
+        }
+    }
+
+    // Check Cross-Month Logic
+    // If Cross-Month Combo exists, add 0.5 (representing the Night shift of next month)
+    // to make the total for that sequence = 1.0 in THIS month.
+    if (isCrossMonthCombo(staffId)) {
+        count += 0.5;
+    }
+
+    // Format: remove decimals if whole number
+    return count % 1 === 0 ? count.toString() : count.toFixed(1);
   };
 
   const isWeekendOrHoliday = (day: number) => {
@@ -96,10 +160,11 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             <thead>
                 <tr className="h-10">
                     <th style={{width: '35px'}}>ลำดับ</th>
-                    <th style={{width: '180px'}}>ชื่อ – สกุล</th>
+                    <th style={{width: '150px'}}>ชื่อ – สกุล</th>
                     <th colSpan={daysInMonth} style={{padding: '2px'}}>วันที่ปฏิบัติงาน</th>
+                    <th style={{width: '60px'}}>จำนวนเวร</th>
                     {/* Dynamic Last Column Header */}
-                    <th style={{width: '100px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
+                    <th style={{width: '90px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
                 </tr>
                 <tr className="h-6">
                     <th className="bg-slate-50 border-t-0"></th>
@@ -116,6 +181,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                         {day}
                         </th>
                     ))}
+                    <th className="bg-slate-50 border-t-0"></th>
                     <th className="bg-slate-50 border-t-0"></th>
                 </tr>
             </thead>
@@ -136,6 +202,10 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                         {getShiftCode(staff.id, day)}
                     </td>
                     ))}
+                    {/* Shift Count Column */}
+                    <td style={{fontWeight: 'bold', fontSize: '12px', color: '#1e293b'}}>
+                        {calculateShiftCount(staff.id)}
+                    </td>
                     {/* Dynamic Last Column Content */}
                     <td style={{fontWeight: 'bold', fontSize: '12px', color: '#1e293b'}}>
                         {pageNumber === 2 ? calculateAmount(staff.id) : ""}
