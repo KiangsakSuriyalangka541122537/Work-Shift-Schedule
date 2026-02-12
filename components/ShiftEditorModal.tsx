@@ -37,9 +37,6 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
   // Filter relevant history - effectively mostly swaps now
   const relevantHistory = historyLogs.filter(log => log.targetDate === dateStr);
 
-  // Logic: Morning shift is allowed ONLY on holidays/weekends
-  const isMorningAllowed = isHoliday;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all scale-100 max-h-[90vh] flex flex-col">
@@ -81,14 +78,11 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
               
               <div className="grid grid-cols-1 gap-3 mb-6">
                 
-                {/* Morning - Only allowed on Holidays */}
+                {/* Morning - Allowed Every Day */}
                 <button
-                  onClick={() => isMorningAllowed && onSave('MORNING')}
-                  disabled={!isMorningAllowed}
+                  onClick={() => onSave('MORNING')}
                   className={`flex items-center p-3 rounded-xl border-2 transition-all group ${
-                    !isMorningAllowed 
-                      ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed grayscale'
-                      : currentShiftType === ShiftType.MORNING
+                    currentShiftType === ShiftType.MORNING
                         ? 'border-sky-300 bg-sky-50 ring-1 ring-sky-200'
                         : 'border-gray-100 hover:border-sky-200 hover:bg-white'
                   }`}
@@ -99,7 +93,6 @@ export const ShiftEditorModal: React.FC<ShiftEditorModalProps> = ({
                   <div className="text-left flex-1">
                      <div className="font-bold text-gray-800 flex items-center gap-2">
                         เวรเช้า
-                        {!isMorningAllowed && <span className="text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">วันทำการห้ามลง</span>}
                      </div>
                      <div className="text-xs text-gray-500">08.00 - 16.00 น.</div>
                   </div>
