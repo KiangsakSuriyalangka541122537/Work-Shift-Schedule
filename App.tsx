@@ -396,14 +396,20 @@ const App: React.FC = () => {
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
       // Find all page containers
+      // We search specifically within our printRef
       const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
+
+      if (pages.length === 0) {
+        throw new Error("ไม่พบหน้าเอกสารที่จะพิมพ์");
+      }
 
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         
         // Capture specific page
+        // Use standard options for html2canvas
         const canvas = await html2canvas(page, {
-          scale: 2.5, // Increased scale for better quality text
+          scale: 2, // Use scale 2 for good balance
           logging: false,
           useCORS: true,
           backgroundColor: '#ffffff'
@@ -419,9 +425,9 @@ const App: React.FC = () => {
 
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Export failed:", error);
-      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
+      alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${error.message || "Unknown error"}`);
     } finally {
       setIsExporting(false);
     }
@@ -1053,9 +1059,10 @@ const App: React.FC = () => {
       </div>
 
       {/* Hidden Print Area */}
-      {/* Positioned fixed top-left but behind everything and transparent to events, ensuring html2canvas can 'see' it */}
-      <div className="fixed top-0 left-[-10000px] z-[-50]">
-        <div ref={printRef}>
+      {/* Positioned fixed at 0,0 but transparent and behind everything (z-index: -50). */}
+      {/* This ensures html2canvas can capture it without "Unable to find element" errors caused by off-screen positioning. */}
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '297mm', zIndex: -50, opacity: 0, pointerEvents: 'none' }}>
+        <div ref={printRef} style={{ width: '100%' }}>
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
