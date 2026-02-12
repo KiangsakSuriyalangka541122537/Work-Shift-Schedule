@@ -169,7 +169,7 @@ const App: React.FC = () => {
   // Reset Month Action
   const handleResetMonth = async () => {
     if (!isKikOrAdmin) return;
-    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\n1. ข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร\n2. สถานะจะถูกเปลี่ยนกลับเป็น "ฉบับร่าง" (Draft) เพื่อให้คุณเริ่มจัดใหม่`);
+    const confirm = window.confirm(`คำเตือน! คุณต้องการ "ล้างข้อมูล" ทั้งหมดของเดือนนี้ใช่หรือไม่?\n\n1. ข้อมูลเวรทั้งหมดในเดือน ${currentDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })} จะถูกลบถาวร\n2. สถานะจะถูกเปลี่ยนกลับเป็น "ฉบับร่าง" (Draft) เพื่อให้คุณเริ่มจัดใหม่\n3. ประวัติการแลกเวรทั้งหมดของเดือนนี้จะถูกลบ`);
     if (!confirm) return;
 
     try {
@@ -186,7 +186,15 @@ const App: React.FC = () => {
 
         if (deleteError) throw deleteError;
 
-        // 2. Unpublish (Set back to draft) AND Clear Snapshot
+        // 2. Delete shift logs for this month
+        const { error: deleteLogsError } = await supabase
+            .from('shift_logs')
+            .delete()
+            .eq('month_key', monthKey);
+
+        if (deleteLogsError) throw deleteLogsError;
+
+        // 3. Unpublish (Set back to draft) AND Clear Snapshot
         // Try to update with original_assignments (assuming DB is updated)
         const statusPayload: any = { 
             month_key: monthKey, 
@@ -219,6 +227,7 @@ const App: React.FC = () => {
         // Clear local state for this month & Set to Draft
         setAssignments(prev => prev.filter(a => !a.date.startsWith(`${year}-${month}-`)));
         setOriginalAssignments([]);
+        setHistory([]); // Clear local history
         setIsPublished(false);
         
         alert("ล้างข้อมูลและยกเลิกการประกาศเรียบร้อยแล้ว");
