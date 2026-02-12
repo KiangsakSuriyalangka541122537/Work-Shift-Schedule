@@ -386,7 +386,11 @@ const App: React.FC = () => {
 
   // PDF Export
   const handleExportPDF = async () => {
-    if (!printRef.current) return;
+    if (!printRef.current) {
+        alert("ไม่พบข้อมูลสำหรับพิมพ์");
+        return;
+    }
+    
     setIsExporting(true);
 
     try {
@@ -396,7 +400,12 @@ const App: React.FC = () => {
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
       // Find all page containers
+      // We search specifically within our printRef
       const pages = Array.from(printRef.current.querySelectorAll('.print-page'));
+
+      if (pages.length === 0) {
+        throw new Error("No pages found to export");
+      }
 
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
@@ -405,8 +414,10 @@ const App: React.FC = () => {
         const canvas = await html2canvas(page, {
           scale: 2.5, // Increased scale for better quality text
           logging: false,
-          useCORS: true,
-          backgroundColor: '#ffffff'
+          useCORS: true, // Use CORS for images if any (though avatars aren't in print view)
+          allowTaint: true, // Allow tainted canvas just in case (e.g. font loading)
+          backgroundColor: '#ffffff',
+          windowWidth: 2000 // Force a width to prevent responsiveness issues
         });
 
         const imgData = canvas.toDataURL('image/png');
@@ -419,9 +430,9 @@ const App: React.FC = () => {
 
       const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
       pdf.save(`duty_roster_${monthStr}.pdf`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Export failed:", error);
-      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
+      alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ PDF: ${error.message || 'Unknown error'}`);
     } finally {
       setIsExporting(false);
     }
@@ -1054,8 +1065,8 @@ const App: React.FC = () => {
 
       {/* Hidden Print Area */}
       {/* Positioned fixed top-left but behind everything and transparent to events, ensuring html2canvas can 'see' it */}
-      <div className="fixed top-0 left-[-10000px] z-[-50]">
-        <div ref={printRef}>
+      <div className="fixed top-0 left-0 w-[297mm] z-[-50] opacity-0 pointer-events-none overflow-hidden">
+        <div ref={printRef} className="absolute top-0 left-0">
           <OfficialPrintView 
             currentDate={currentDate}
             staffList={STAFF_LIST}
