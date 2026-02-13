@@ -604,14 +604,48 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // Logic update: Swap based on priority to resolve ambiguity (M+N on same day).
-    // Priority: Morning > Afternoon > Night.
-    // Also keeping the "Forward Combo" for Afternoon (A + Next N) to support B-D swapping.
+    // Logic update: Swap based on priority AND context-awareness to resolve ambiguity (M+N on same day).
+    // Context-Awareness: If source selected 'Morning', prioritize 'Morning' at target.
+    // Priorities: Morning > Afternoon (Forward Combo) > Night (Backward Combo).
     
-    const getSwappableShifts = (coord: CellCoordinate) => {
+    const getSwappableShifts = (coord: CellCoordinate, preferredTypes?: ShiftType[]) => {
         const currentShifts = getShifts(coord.staffId, coord.day);
         
-        // Priority 1: Morning (Use it if present, ignore Night)
+        // 1. Try to match preference if provided (Context-Aware)
+        if (preferredTypes && preferredTypes.length > 0) {
+            // Priority 1: Match Morning preference
+            if (preferredTypes.includes(ShiftType.MORNING)) {
+                const m = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
+                if (m) return [m];
+            }
+            
+            // Priority 2: Match Combo (Afternoon/Night) preference
+            if (preferredTypes.includes(ShiftType.AFTERNOON) || preferredTypes.includes(ShiftType.NIGHT)) {
+                 // Check for Afternoon (Forward Combo)
+                 const a = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
+                 if (a) {
+                    const block = [a];
+                    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
+                    const nextDateStr = formatDateToISO(nextDate);
+                    const nextNight = assignments.find(x => x.staffId === coord.staffId && x.date === nextDateStr && x.shiftType === ShiftType.NIGHT);
+                    if (nextNight) block.push(nextNight);
+                    return block;
+                 }
+                 
+                 // Check for Night (Backward Combo)
+                 const n = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
+                 if (n) {
+                    const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+                    const prevDateStr = formatDateToISO(prevDate);
+                    const prevAfternoon = assignments.find(x => x.staffId === coord.staffId && x.date === prevDateStr && x.shiftType === ShiftType.AFTERNOON);
+                    if (prevAfternoon) return [prevAfternoon, n];
+                    return [n];
+                 }
+            }
+        }
+
+        // 2. Default Priority (M > A > N)
+        // Priority 1: Morning (High priority - always select if present)
         const morning = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
         if (morning) {
             return [morning];
@@ -634,17 +668,36 @@ const App: React.FC = () => {
             return block;
         }
 
-        // Priority 3: Night (Standalone or Orphan, or user clicked a day with ONLY Night)
+        // Priority 3: Night 
+        // Logic: If standalone, select it. 
+        // If part of combo (Prev Day Afternoon), select BOTH to keep concept "B-D go together".
         const night = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
         if (night) {
+            const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+            const prevDateStr = formatDateToISO(prevDate);
+            const prevAfternoon = assignments.find(a => 
+                a.staffId === coord.staffId && 
+                a.date === prevDateStr && 
+                a.shiftType === ShiftType.AFTERNOON
+            );
+            
+            if (prevAfternoon) {
+                return [prevAfternoon, night];
+            }
             return [night];
         }
 
         return [];
     };
 
+    // 1. Determine Source Block (Standard Priority - as no hint yet)
     const sourceBlock = getSwappableShifts(source);
-    const targetBlock = getSwappableShifts(target);
+    
+    // 2. Extract types from source to use as hint for target
+    const sourceTypes = sourceBlock.map(s => s.shiftType);
+
+    // 3. Determine Target Block (With Hint)
+    const targetBlock = getSwappableShifts(target, sourceTypes);
 
     // Logging Logic
     const sName = getStaffName(source.staffId);
