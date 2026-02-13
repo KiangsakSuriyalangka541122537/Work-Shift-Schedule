@@ -612,8 +612,6 @@ const App: React.FC = () => {
     // 2. Check for intersections in shift types (Morning vs Combo).
     // 3. If types match (e.g. Both have M), swap ONLY the matching blocks.
     // 4. If types don't match (e.g. M vs A), swap EVERYTHING.
-    // This avoids "guessing" priority and solves the issue where swapping Morning 
-    // accidentally dragged a Night shift (from yesterday) with it.
 
     const getShiftBlocks = (coord: CellCoordinate) => {
         const currentShifts = getShifts(coord.staffId, coord.day);
@@ -663,14 +661,11 @@ const App: React.FC = () => {
 
     if (hasIntersection) {
         // Smart Match: Swap only matching types.
-        // e.g. Source has [M, BD], Target has [M]. -> Swap M only. Leave BD alone.
         const typesToSwap = new Set(commonTypes);
-        
         sourceBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => sShiftsToMove.push(...b.shifts));
         targetBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => tShiftsToMove.push(...b.shifts));
     } else {
         // No match? Swap everything (Freedom Mode).
-        // e.g. Source has [M], Target has [BD]. -> Swap M for BD.
         sourceBlocks.forEach(b => sShiftsToMove.push(...b.shifts));
         targetBlocks.forEach(b => tShiftsToMove.push(...b.shifts));
     }
@@ -698,6 +693,28 @@ const App: React.FC = () => {
         addHistoryLog(formatDateToISO(sourceDateObj), msg, 'SWAP');
     }
     
+    // NEW LOGIC: Date Shifting for Same-Staff Swap
+    const isSameStaff = source.staffId === target.staffId;
+    
+    // Helper to safely parse YYYY-MM-DD to Local Date
+    const parseISODate = (str: string) => {
+        const [y, m, d] = str.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    };
+
+    const sBaseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), source.day);
+    const tBaseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), target.day);
+
+    const getNewDate = (originalDateStr: string, destinationBase: Date, originBase: Date) => {
+        if (!isSameStaff) return originalDateStr; // Cross-staff: Keep date (Swap Responsibility)
+        
+        // Same-staff: Shift date (Swap Time)
+        const originalDate = parseISODate(originalDateStr);
+        const diff = originalDate.getTime() - originBase.getTime();
+        const newDate = new Date(destinationBase.getTime() + diff);
+        return formatDateToISO(newDate);
+    };
+
     setAssignments(prev => {
         let nextAssignments = [...prev];
 
@@ -713,24 +730,28 @@ const App: React.FC = () => {
             deleteAssignmentFromDB(s.id);
         });
 
-        // 3. Add Target Shifts to Source Staff (Keeping Date, Changing Staff)
-        // Note: We use s.date (Target's original date) because we are swapping TIME SLOTS.
-        // e.g. Tor takes Kik's slot on Day 8.
+        // 3. Add Target Shifts to Source
         tShiftsToMove.forEach(s => {
-            const newId = `${source.staffId}-${s.date}-${s.shiftType}`;
-            const newAssign = { ...s, id: newId, staffId: source.staffId };
-            // Avoid duplicates
+            const newStaffId = source.staffId;
+            const newDate = getNewDate(s.date, sBaseDate, tBaseDate);
+            
+            const newId = `${newStaffId}-${newDate}-${s.shiftType}`;
+            const newAssign = { ...s, id: newId, staffId: newStaffId, date: newDate };
+            
             if (!nextAssignments.some(na => na.id === newId)) {
                 nextAssignments.push(newAssign);
                 saveAssignmentToDB(newAssign);
             }
         });
 
-        // 4. Add Source Shifts to Target Staff
+        // 4. Add Source Shifts to Target
         sShiftsToMove.forEach(s => {
-             const newId = `${target.staffId}-${s.date}-${s.shiftType}`;
-             const newAssign = { ...s, id: newId, staffId: target.staffId };
-             // Avoid duplicates
+             const newStaffId = target.staffId;
+             const newDate = getNewDate(s.date, tBaseDate, sBaseDate);
+
+             const newId = `${newStaffId}-${newDate}-${s.shiftType}`;
+             const newAssign = { ...s, id: newId, staffId: newStaffId, date: newDate };
+             
              if (!nextAssignments.some(na => na.id === newId)) {
                 nextAssignments.push(newAssign);
                 saveAssignmentToDB(newAssign);
