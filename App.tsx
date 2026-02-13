@@ -604,110 +604,56 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // Logic: Smart Priority Selection Swap
-    // 1. Identify "Units/Blocks" at Source and Target.
-    // 2. Determine "User Intent" based on Source Priority (Morning > Combo).
-    // 3. Find matching block in Target.
-    // 4. If match found, swap those.
-    // 5. If no match found, swap "User Intent" with "Target Priority" (Freedom Mode).
+    // Logic: Absolute Freedom Swap (Cross-Type Swap)
+    // 1. Identify the "Dominant Package" at Source and Target.
+    //    - If Morning exists, that's the package.
+    //    - If Afternoon exists, it includes the associated Night (likely tomorrow).
+    //    - If Night exists, it includes the associated Afternoon (likely yesterday).
+    // 2. Perform unconditional swap of these packages.
+    //    - Source Package moves to Target (Person or Date).
+    //    - Target Package moves to Source (Person or Date).
 
-    const getShiftBlocks = (coord: CellCoordinate) => {
+    const getDominantBlock = (coord: CellCoordinate) => {
         const currentShifts = getShifts(coord.staffId, coord.day);
-        const blocks: { type: 'M' | 'BD'; shifts: ShiftAssignment[] }[] = [];
         
-        currentShifts.forEach(shift => {
-            if (shift.shiftType === ShiftType.MORNING) {
-                blocks.push({ type: 'M', shifts: [shift] });
-            } else if (shift.shiftType === ShiftType.AFTERNOON) {
-                // Afternoon + Next Night
-                const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
-                const nextDateStr = formatDateToISO(nextDate);
-                const nextNight = assignments.find(a => 
-                    a.staffId === coord.staffId && 
-                    a.date === nextDateStr && 
-                    a.shiftType === ShiftType.NIGHT
-                );
-                blocks.push({ type: 'BD', shifts: nextNight ? [shift, nextNight] : [shift] });
-            } else if (shift.shiftType === ShiftType.NIGHT) {
-                // Night + Prev Afternoon
-                const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
-                const prevDateStr = formatDateToISO(prevDate);
-                const prevAfternoon = assignments.find(a => 
-                    a.staffId === coord.staffId && 
-                    a.date === prevDateStr && 
-                    a.shiftType === ShiftType.AFTERNOON
-                );
-                blocks.push({ type: 'BD', shifts: prevAfternoon ? [prevAfternoon, shift] : [shift] });
-            }
-        });
+        // Priority 1: Morning
+        const morning = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
+        if (morning) return [morning];
 
-        // Simple deduplication based on shift IDs to avoid double counting
-        const uniqueBlocks: typeof blocks = [];
-        const seenIds = new Set<string>();
-        blocks.forEach(b => {
-            const ids = b.shifts.map(s => s.id).join(',');
-            if (!seenIds.has(ids)) {
-                seenIds.add(ids);
-                uniqueBlocks.push(b);
-            }
-        });
-        return uniqueBlocks;
+        // Priority 2: Afternoon (Start of Combo)
+        const afternoon = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
+        if (afternoon) {
+             // Find next day Night
+             const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
+             const nextDateStr = formatDateToISO(nextDate);
+             const nextNight = assignments.find(a => 
+                a.staffId === coord.staffId && 
+                a.date === nextDateStr && 
+                a.shiftType === ShiftType.NIGHT
+             );
+             return nextNight ? [afternoon, nextNight] : [afternoon];
+        }
+
+        // Priority 3: Night (End of Combo - clicked on the Night part)
+        const night = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
+        if (night) {
+             // Find prev day Afternoon
+             const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+             const prevDateStr = formatDateToISO(prevDate);
+             const prevAfternoon = assignments.find(a => 
+                a.staffId === coord.staffId && 
+                a.date === prevDateStr && 
+                a.shiftType === ShiftType.AFTERNOON
+             );
+             return prevAfternoon ? [prevAfternoon, night] : [night];
+        }
+
+        // Priority 4: Empty (Off)
+        return [];
     };
 
-    const sourceBlocks = getShiftBlocks(source);
-    const targetBlocks = getShiftBlocks(target);
-
-    // Priority Helper: Morning > Combo (BD)
-    const getPriorityBlock = (blocks: typeof sourceBlocks) => {
-        const mBlock = blocks.find(b => b.type === 'M');
-        if (mBlock) return mBlock;
-        const bdBlock = blocks.find(b => b.type === 'BD');
-        if (bdBlock) return bdBlock;
-        return null;
-    };
-
-    const sBlock = getPriorityBlock(sourceBlocks);
-    
-    let sShiftsToMove: ShiftAssignment[] = [];
-    let tShiftsToMove: ShiftAssignment[] = [];
-
-    if (sBlock) {
-        // Source is not empty. Determine intent based on Source Priority.
-        
-        // Try to find matching type in Target (Smart Match)
-        const matchingTBlock = targetBlocks.find(b => b.type === sBlock.type);
-        
-        if (matchingTBlock) {
-            // Match Found: Swap Same Types
-            sShiftsToMove = sBlock.shifts;
-            tShiftsToMove = matchingTBlock.shifts;
-        } else {
-            // No Match: Freedom Swap (Swap Source Priority with Target Priority)
-            // This fixes the "Swap Twice" issue by specifically targeting the Priority Block
-            // instead of swapping *everything* (which might include unwanted leftover shifts).
-            sShiftsToMove = sBlock.shifts;
-            const tPriorityBlock = getPriorityBlock(targetBlocks);
-            if (tPriorityBlock) {
-                tShiftsToMove = tPriorityBlock.shifts;
-            } else {
-                // Target is empty
-                tShiftsToMove = [];
-            }
-        }
-    } else {
-        // Source is empty.
-        // We act based on Target Priority (effectively moving Target to Source)
-        const tPriorityBlock = getPriorityBlock(targetBlocks);
-        if (tPriorityBlock) {
-            tShiftsToMove = tPriorityBlock.shifts;
-            sShiftsToMove = [];
-        } else {
-            // Both empty. Do nothing.
-            setIsSwapMode(false);
-            setSwapSource(null);
-            return;
-        }
-    }
+    const sShiftsToMove = getDominantBlock(source);
+    const tShiftsToMove = getDominantBlock(target);
 
     // Logging Logic
     const sName = getStaffName(source.staffId);
@@ -716,7 +662,6 @@ const App: React.FC = () => {
     const targetDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), target.day);
     const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     
-    // Generate readable label for log
     const getLabel = (shifts: ShiftAssignment[]) => {
         if (shifts.length === 0) return 'วันหยุด';
         const types = shifts.map(s => s.shiftType);
@@ -728,6 +673,8 @@ const App: React.FC = () => {
     const tLabel = getLabel(tShiftsToMove);
 
     const msg = `เวร ${sLabel} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกกับ เวร ${tLabel} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
+    
+    // Only log if something actually happened (not swapping Off with Off)
     if (sShiftsToMove.length > 0 || tShiftsToMove.length > 0) {
         addHistoryLog(formatDateToISO(sourceDateObj), msg, 'SWAP');
     }
