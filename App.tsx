@@ -32,6 +32,9 @@ const App: React.FC = () => {
   const [selectedCell, setSelectedCell] = useState<CellCoordinate | null>(null);
   const [isSwapMode, setIsSwapMode] = useState(false);
   const [swapSource, setSwapSource] = useState<CellCoordinate | null>(null);
+  // NEW: Store IDs of shifts being swapped for visual highlighting
+  const [swapSourceIds, setSwapSourceIds] = useState<string[]>([]);
+  
   const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   // Confirmation State
@@ -461,6 +464,7 @@ const App: React.FC = () => {
     setCurrentUsername('');
     setIsSwapMode(false);
     setSwapSource(null);
+    setSwapSourceIds([]);
     setSelectedCell(null);
   };
 
@@ -518,6 +522,48 @@ const App: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  // Logic: Absolute Freedom Swap (Cross-Type Swap) with Relative Date Logic
+  // 1. Identify "Dominant Package" at Source and Target (Morning, or Afternoon+Night, or Night+PrevAfternoon).
+  // 2. Perform unconditional swap by calculating RELATIVE OFFSETS from the clicked date.
+  const getDominantBlock = (coord: CellCoordinate) => {
+      const currentShifts = getShifts(coord.staffId, coord.day);
+      
+      // Priority 1: Morning
+      const morning = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
+      if (morning) return [morning];
+
+      // Priority 2: Afternoon (Start of Combo)
+      const afternoon = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
+      if (afternoon) {
+            // Find next day Night
+            const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
+            const nextDateStr = formatDateToISO(nextDate);
+            const nextNight = assignments.find(a => 
+              a.staffId === coord.staffId && 
+              a.date === nextDateStr && 
+              a.shiftType === ShiftType.NIGHT
+            );
+            return nextNight ? [afternoon, nextNight] : [afternoon];
+      }
+
+      // Priority 3: Night (End of Combo - clicked on the Night part)
+      const night = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
+      if (night) {
+            // Find prev day Afternoon
+            const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+            const prevDateStr = formatDateToISO(prevDate);
+            const prevAfternoon = assignments.find(a => 
+              a.staffId === coord.staffId && 
+              a.date === prevDateStr && 
+              a.shiftType === ShiftType.AFTERNOON
+            );
+            return prevAfternoon ? [prevAfternoon, night] : [night];
+      }
+
+      // Priority 4: Empty (Off)
+      return [];
   };
 
   // Actions
@@ -604,54 +650,6 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // Logic: Absolute Freedom Swap (Cross-Type Swap)
-    // 1. Identify the "Dominant Package" at Source and Target.
-    //    - If Morning exists, that's the package.
-    //    - If Afternoon exists, it includes the associated Night (likely tomorrow).
-    //    - If Night exists, it includes the associated Afternoon (likely yesterday).
-    // 2. Perform unconditional swap of these packages.
-    //    - Source Package moves to Target (Person or Date).
-    //    - Target Package moves to Source (Person or Date).
-
-    const getDominantBlock = (coord: CellCoordinate) => {
-        const currentShifts = getShifts(coord.staffId, coord.day);
-        
-        // Priority 1: Morning
-        const morning = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
-        if (morning) return [morning];
-
-        // Priority 2: Afternoon (Start of Combo)
-        const afternoon = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
-        if (afternoon) {
-             // Find next day Night
-             const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
-             const nextDateStr = formatDateToISO(nextDate);
-             const nextNight = assignments.find(a => 
-                a.staffId === coord.staffId && 
-                a.date === nextDateStr && 
-                a.shiftType === ShiftType.NIGHT
-             );
-             return nextNight ? [afternoon, nextNight] : [afternoon];
-        }
-
-        // Priority 3: Night (End of Combo - clicked on the Night part)
-        const night = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
-        if (night) {
-             // Find prev day Afternoon
-             const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
-             const prevDateStr = formatDateToISO(prevDate);
-             const prevAfternoon = assignments.find(a => 
-                a.staffId === coord.staffId && 
-                a.date === prevDateStr && 
-                a.shiftType === ShiftType.AFTERNOON
-             );
-             return prevAfternoon ? [prevAfternoon, night] : [night];
-        }
-
-        // Priority 4: Empty (Off)
-        return [];
-    };
-
     const sShiftsToMove = getDominantBlock(source);
     const tShiftsToMove = getDominantBlock(target);
 
@@ -679,61 +677,65 @@ const App: React.FC = () => {
         addHistoryLog(formatDateToISO(sourceDateObj), msg, 'SWAP');
     }
     
-    // Logic: Date Shifting for Same-Staff Swap vs Responsibility Swap for Diff-Staff
-    const isSameStaff = source.staffId === target.staffId;
-    
-    // Helper to safely parse YYYY-MM-DD to Local Date
+    // Helper: Parse Date
     const parseISODate = (str: string) => {
         const [y, m, d] = str.split('-').map(Number);
         return new Date(y, m - 1, d);
     };
 
+    // Bases
     const sBaseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), source.day);
     const tBaseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), target.day);
 
-    const getNewDate = (originalDateStr: string, destinationBase: Date, originBase: Date) => {
-        if (!isSameStaff) return originalDateStr; // Cross-staff: Keep date (Swap Responsibility)
-        
-        // Same-staff: Shift date (Swap Time)
-        const originalDate = parseISODate(originalDateStr);
-        const diff = originalDate.getTime() - originBase.getTime();
-        const newDate = new Date(destinationBase.getTime() + diff);
+    // Precise Date Calculation using Offsets
+    // This ensures that if we move a Combo (Day 1 + Day 2), it stays a Combo relative to the new start date.
+    const calculateNewDate = (shiftDateStr: string, originalAnchorDate: Date, newAnchorDate: Date) => {
+        const shiftDate = parseISODate(shiftDateStr);
+        // Calculate diff in milliseconds
+        const diff = shiftDate.getTime() - originalAnchorDate.getTime();
+        // Add diff to new anchor
+        const newDate = new Date(newAnchorDate.getTime() + diff);
         return formatDateToISO(newDate);
     };
 
     setAssignments(prev => {
         let nextAssignments = [...prev];
 
-        // 1. Remove Source Shifts from Source Staff
+        // 1. CLEANUP: Remove Source Shifts from DB & State
         sShiftsToMove.forEach(s => {
             nextAssignments = nextAssignments.filter(a => a.id !== s.id);
             deleteAssignmentFromDB(s.id);
         });
 
-        // 2. Remove Target Shifts from Target Staff
+        // 2. CLEANUP: Remove Target Shifts from DB & State
         tShiftsToMove.forEach(s => {
             nextAssignments = nextAssignments.filter(a => a.id !== s.id);
             deleteAssignmentFromDB(s.id);
         });
 
-        // 3. Add Target Shifts to Source
+        // 3. MOVE TARGET -> SOURCE
+        // "Target Shifts" now belong to "Source Staff" starting at "Source Base Date"
         tShiftsToMove.forEach(s => {
             const newStaffId = source.staffId;
-            const newDate = getNewDate(s.date, sBaseDate, tBaseDate);
+            // Calculate date relative to the Target Anchor, applied to Source Anchor
+            const newDate = calculateNewDate(s.date, tBaseDate, sBaseDate);
             
             const newId = `${newStaffId}-${newDate}-${s.shiftType}`;
             const newAssign = { ...s, id: newId, staffId: newStaffId, date: newDate };
             
+            // Avoid duplicates
             if (!nextAssignments.some(na => na.id === newId)) {
                 nextAssignments.push(newAssign);
                 saveAssignmentToDB(newAssign);
             }
         });
 
-        // 4. Add Source Shifts to Target
+        // 4. MOVE SOURCE -> TARGET
+        // "Source Shifts" now belong to "Target Staff" starting at "Target Base Date"
         sShiftsToMove.forEach(s => {
              const newStaffId = target.staffId;
-             const newDate = getNewDate(s.date, tBaseDate, sBaseDate);
+             // Calculate date relative to the Source Anchor, applied to Target Anchor
+             const newDate = calculateNewDate(s.date, sBaseDate, tBaseDate);
 
              const newId = `${newStaffId}-${newDate}-${s.shiftType}`;
              const newAssign = { ...s, id: newId, staffId: newStaffId, date: newDate };
@@ -749,6 +751,7 @@ const App: React.FC = () => {
 
     setIsSwapMode(false);
     setSwapSource(null);
+    setSwapSourceIds([]);
   };
 
   const executeSave = (action: string, staffId: string, day: number) => {
@@ -844,6 +847,11 @@ const App: React.FC = () => {
   };
 
   const initiateSwapFromModal = () => {
+    // Identify blocks to highlight visually immediately
+    if (selectedCell) {
+        const block = getDominantBlock(selectedCell);
+        setSwapSourceIds(block.map(s => s.id));
+    }
     setSwapSource(selectedCell);
     setIsSwapMode(true);
     setSelectedCell(null);
@@ -851,7 +859,13 @@ const App: React.FC = () => {
 
   const renderCell = (staff: Staff, day: number) => {
     const shifts = getShifts(staff.id, day);
-    const isSource = isSwapMode && swapSource?.staffId === staff.id && swapSource?.day === day;
+    
+    // Improved Swap Logic Visuals: Check if ANY shift in this cell is part of the Swap Source Block
+    const isSourceCell = isSwapMode && shifts.some(s => swapSourceIds.includes(s.id));
+    
+    // If empty cell selected as source (swapping "OFF")
+    const isSourceEmpty = isSwapMode && swapSource && swapSource.staffId === staff.id && swapSource.day === day && shifts.length === 0;
+
     const isSpecial = isWeekendOrHoliday(day);
     const isCurrentDay = isToday(day);
     
@@ -887,7 +901,9 @@ const App: React.FC = () => {
     }
 
     const cursorClass = userCanInteract ? 'cursor-pointer hover:brightness-95' : 'cursor-default opacity-90';
-    const swapClass = isSource ? 'ring-2 ring-primary ring-inset z-10 animate-pulse' : '';
+    
+    // Enhanced Highlight: Pulse ANY cell that is part of the source block (Morning, Afternoon, OR Night)
+    const swapClass = (isSourceCell || isSourceEmpty) ? 'ring-2 ring-primary ring-inset z-10 animate-pulse bg-primary/5' : '';
     
     let todayClass = isCurrentDay ? 'bg-emerald-50/40' : '';
     let todayShiftHighlight = '';
@@ -1132,7 +1148,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-4">
                       <p className="font-bold text-base">โหมดสลับเวร</p>
                   </div>
-                  <button onClick={() => { setIsSwapMode(false); setSwapSource(null); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20">ยกเลิก</button>
+                  <button onClick={() => { setIsSwapMode(false); setSwapSource(null); setSwapSourceIds([]); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/20">ยกเลิก</button>
               </div>
           )}
 
