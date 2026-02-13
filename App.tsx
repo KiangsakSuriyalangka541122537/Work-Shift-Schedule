@@ -604,100 +604,76 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // Logic update: Swap based on priority AND context-awareness to resolve ambiguity (M+N on same day).
-    // Context-Awareness: If source selected 'Morning', prioritize 'Morning' at target.
-    // Priorities: Morning > Afternoon (Forward Combo) > Night (Backward Combo).
-    
-    const getSwappableShifts = (coord: CellCoordinate, preferredTypes?: ShiftType[]) => {
+    // Logic: Flexible "Block Matching" Swap
+    // 1. Identify "Units/Blocks" at Source and Target.
+    //    - Morning (M) is a unit.
+    //    - Afternoon (A) + Next Night (N) is a unit.
+    //    - Night (N) + Prev Afternoon (A) is a unit.
+    // 2. Check for intersections in shift types (Morning vs Combo).
+    // 3. If types match (e.g. Both have M), swap ONLY the matching blocks.
+    // 4. If types don't match (e.g. M vs A), swap EVERYTHING.
+    // This avoids "guessing" priority and solves the issue where swapping Morning 
+    // accidentally dragged a Night shift (from yesterday) with it.
+
+    const getShiftBlocks = (coord: CellCoordinate) => {
         const currentShifts = getShifts(coord.staffId, coord.day);
+        const blocks: { type: 'M' | 'BD'; shifts: ShiftAssignment[] }[] = [];
         
-        // 1. Try to match preference if provided (Context-Aware)
-        if (preferredTypes && preferredTypes.length > 0) {
-            // Priority 1: Match Morning preference
-            if (preferredTypes.includes(ShiftType.MORNING)) {
-                const m = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
-                if (m) return [m];
+        currentShifts.forEach(shift => {
+            if (shift.shiftType === ShiftType.MORNING) {
+                blocks.push({ type: 'M', shifts: [shift] });
+            } else if (shift.shiftType === ShiftType.AFTERNOON) {
+                // Afternoon + Next Night
+                const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
+                const nextDateStr = formatDateToISO(nextDate);
+                const nextNight = assignments.find(a => 
+                    a.staffId === coord.staffId && 
+                    a.date === nextDateStr && 
+                    a.shiftType === ShiftType.NIGHT
+                );
+                blocks.push({ type: 'BD', shifts: nextNight ? [shift, nextNight] : [shift] });
+            } else if (shift.shiftType === ShiftType.NIGHT) {
+                // Night + Prev Afternoon
+                const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
+                const prevDateStr = formatDateToISO(prevDate);
+                const prevAfternoon = assignments.find(a => 
+                    a.staffId === coord.staffId && 
+                    a.date === prevDateStr && 
+                    a.shiftType === ShiftType.AFTERNOON
+                );
+                blocks.push({ type: 'BD', shifts: prevAfternoon ? [prevAfternoon, shift] : [shift] });
             }
-            
-            // Priority 2: Match Combo (Afternoon/Night) preference
-            if (preferredTypes.includes(ShiftType.AFTERNOON) || preferredTypes.includes(ShiftType.NIGHT)) {
-                 // Check for Afternoon (Forward Combo)
-                 const a = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
-                 if (a) {
-                    const block = [a];
-                    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
-                    const nextDateStr = formatDateToISO(nextDate);
-                    const nextNight = assignments.find(x => x.staffId === coord.staffId && x.date === nextDateStr && x.shiftType === ShiftType.NIGHT);
-                    if (nextNight) block.push(nextNight);
-                    return block;
-                 }
-                 
-                 // Check for Night (Backward Combo)
-                 const n = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
-                 if (n) {
-                    const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
-                    const prevDateStr = formatDateToISO(prevDate);
-                    const prevAfternoon = assignments.find(x => x.staffId === coord.staffId && x.date === prevDateStr && x.shiftType === ShiftType.AFTERNOON);
-                    if (prevAfternoon) return [prevAfternoon, n];
-                    return [n];
-                 }
-            }
-        }
-
-        // 2. Default Priority (M > A > N)
-        // Priority 1: Morning (High priority - always select if present)
-        const morning = currentShifts.find(s => s.shiftType === ShiftType.MORNING);
-        if (morning) {
-            return [morning];
-        }
-
-        // Priority 2: Afternoon (Include Next Day Night if exists - "Forward Combo")
-        const afternoon = currentShifts.find(s => s.shiftType === ShiftType.AFTERNOON);
-        if (afternoon) {
-            const block = [afternoon];
-            const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day + 1);
-            const nextDateStr = formatDateToISO(nextDate);
-            const nextNight = assignments.find(a => 
-                a.staffId === coord.staffId && 
-                a.date === nextDateStr && 
-                a.shiftType === ShiftType.NIGHT
-            );
-            if (nextNight) {
-                block.push(nextNight);
-            }
-            return block;
-        }
-
-        // Priority 3: Night 
-        // Logic: If standalone, select it. 
-        // If part of combo (Prev Day Afternoon), select BOTH to keep concept "B-D go together".
-        const night = currentShifts.find(s => s.shiftType === ShiftType.NIGHT);
-        if (night) {
-            const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), coord.day - 1);
-            const prevDateStr = formatDateToISO(prevDate);
-            const prevAfternoon = assignments.find(a => 
-                a.staffId === coord.staffId && 
-                a.date === prevDateStr && 
-                a.shiftType === ShiftType.AFTERNOON
-            );
-            
-            if (prevAfternoon) {
-                return [prevAfternoon, night];
-            }
-            return [night];
-        }
-
-        return [];
+        });
+        return blocks;
     };
 
-    // 1. Determine Source Block (Standard Priority - as no hint yet)
-    const sourceBlock = getSwappableShifts(source);
-    
-    // 2. Extract types from source to use as hint for target
-    const sourceTypes = sourceBlock.map(s => s.shiftType);
+    const sourceBlocks = getShiftBlocks(source);
+    const targetBlocks = getShiftBlocks(target);
 
-    // 3. Determine Target Block (With Hint)
-    const targetBlock = getSwappableShifts(target, sourceTypes);
+    // Filter Logic: Match types if possible, else swap all.
+    const sTypes = sourceBlocks.map(b => b.type);
+    const tTypes = targetBlocks.map(b => b.type);
+    
+    // Check if there is ANY overlap in types (e.g. Both have Morning, or Both have BD-Combo)
+    const commonTypes = sTypes.filter(t => tTypes.includes(t));
+    const hasIntersection = commonTypes.length > 0;
+
+    let sShiftsToMove: ShiftAssignment[] = [];
+    let tShiftsToMove: ShiftAssignment[] = [];
+
+    if (hasIntersection) {
+        // Smart Match: Swap only matching types.
+        // e.g. Source has [M, BD], Target has [M]. -> Swap M only. Leave BD alone.
+        const typesToSwap = new Set(commonTypes);
+        
+        sourceBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => sShiftsToMove.push(...b.shifts));
+        targetBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => tShiftsToMove.push(...b.shifts));
+    } else {
+        // No match? Swap everything (Freedom Mode).
+        // e.g. Source has [M], Target has [BD]. -> Swap M for BD.
+        sourceBlocks.forEach(b => sShiftsToMove.push(...b.shifts));
+        targetBlocks.forEach(b => tShiftsToMove.push(...b.shifts));
+    }
 
     // Logging Logic
     const sName = getStaffName(source.staffId);
@@ -706,48 +682,41 @@ const App: React.FC = () => {
     const targetDateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), target.day);
     const formatDateShort = (d: Date) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     
-    // Determine label for Source
-    let sLabel = 'วันหยุด';
-    if (sourceBlock.length > 0) {
-        const types = sourceBlock.map(s => s.shiftType);
-        if (types.includes(ShiftType.MORNING)) sLabel = SHIFT_CONFIG[ShiftType.MORNING].label;
-        else if (types.includes(ShiftType.AFTERNOON) && types.includes(ShiftType.NIGHT)) sLabel = 'บ่าย-ดึก';
-        else if (types.includes(ShiftType.AFTERNOON)) sLabel = SHIFT_CONFIG[ShiftType.AFTERNOON].label;
-        else if (types.includes(ShiftType.NIGHT)) sLabel = SHIFT_CONFIG[ShiftType.NIGHT].label;
-    }
-
-    // Determine label for Target
-    let tLabel = 'วันหยุด';
-    if (targetBlock.length > 0) {
-        const types = targetBlock.map(s => s.shiftType);
-        if (types.includes(ShiftType.MORNING)) tLabel = SHIFT_CONFIG[ShiftType.MORNING].label;
-        else if (types.includes(ShiftType.AFTERNOON) && types.includes(ShiftType.NIGHT)) tLabel = 'บ่าย-ดึก';
-        else if (types.includes(ShiftType.AFTERNOON)) tLabel = SHIFT_CONFIG[ShiftType.AFTERNOON].label;
-        else if (types.includes(ShiftType.NIGHT)) tLabel = SHIFT_CONFIG[ShiftType.NIGHT].label;
-    }
+    // Generate readable label for log
+    const getLabel = (shifts: ShiftAssignment[]) => {
+        if (shifts.length === 0) return 'วันหยุด';
+        const types = shifts.map(s => s.shiftType);
+        if (types.includes(ShiftType.MORNING)) return 'เวรเช้า';
+        if (types.includes(ShiftType.AFTERNOON) || types.includes(ShiftType.NIGHT)) return 'บ่าย-ดึก';
+        return 'เวร';
+    };
+    const sLabel = getLabel(sShiftsToMove);
+    const tLabel = getLabel(tShiftsToMove);
 
     const msg = `เวร ${sLabel} ${sName} วันที่ ${formatDateShort(sourceDateObj)} แลกกับ เวร ${tLabel} ${tName} วันที่ ${formatDateShort(targetDateObj)}`;
-    if (sourceBlock.length > 0 || targetBlock.length > 0) {
+    if (sShiftsToMove.length > 0 || tShiftsToMove.length > 0) {
         addHistoryLog(formatDateToISO(sourceDateObj), msg, 'SWAP');
     }
     
     setAssignments(prev => {
         let nextAssignments = [...prev];
 
-        // 1. Remove Source Block from Source Staff
-        sourceBlock.forEach(s => {
+        // 1. Remove Source Shifts from Source Staff
+        sShiftsToMove.forEach(s => {
             nextAssignments = nextAssignments.filter(a => a.id !== s.id);
             deleteAssignmentFromDB(s.id);
         });
 
-        // 2. Remove Target Block from Target Staff
-        targetBlock.forEach(s => {
+        // 2. Remove Target Shifts from Target Staff
+        tShiftsToMove.forEach(s => {
             nextAssignments = nextAssignments.filter(a => a.id !== s.id);
             deleteAssignmentFromDB(s.id);
         });
 
-        // 3. Add Target's shifts to Source (Adjust Staff ID)
-        targetBlock.forEach(s => {
+        // 3. Add Target Shifts to Source Staff (Keeping Date, Changing Staff)
+        // Note: We use s.date (Target's original date) because we are swapping TIME SLOTS.
+        // e.g. Tor takes Kik's slot on Day 8.
+        tShiftsToMove.forEach(s => {
             const newId = `${source.staffId}-${s.date}-${s.shiftType}`;
             const newAssign = { ...s, id: newId, staffId: source.staffId };
             // Avoid duplicates
@@ -757,8 +726,8 @@ const App: React.FC = () => {
             }
         });
 
-        // 4. Add Source's shifts to Target (Adjust Staff ID)
-        sourceBlock.forEach(s => {
+        // 4. Add Source Shifts to Target Staff
+        sShiftsToMove.forEach(s => {
              const newId = `${target.staffId}-${s.date}-${s.shiftType}`;
              const newAssign = { ...s, id: newId, staffId: target.staffId };
              // Avoid duplicates
