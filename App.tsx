@@ -604,14 +604,12 @@ const App: React.FC = () => {
   };
 
   const performSwap = (source: CellCoordinate, target: CellCoordinate) => {
-    // Logic: Flexible "Block Matching" Swap
+    // Logic: Smart Priority Selection Swap
     // 1. Identify "Units/Blocks" at Source and Target.
-    //    - Morning (M) is a unit.
-    //    - Afternoon (A) + Next Night (N) is a unit.
-    //    - Night (N) + Prev Afternoon (A) is a unit.
-    // 2. Check for intersections in shift types (Morning vs Combo).
-    // 3. If types match (e.g. Both have M), swap ONLY the matching blocks.
-    // 4. If types don't match (e.g. M vs A), swap EVERYTHING.
+    // 2. Determine "User Intent" based on Source Priority (Morning > Combo).
+    // 3. Find matching block in Target.
+    // 4. If match found, swap those.
+    // 5. If no match found, swap "User Intent" with "Target Priority" (Freedom Mode).
 
     const getShiftBlocks = (coord: CellCoordinate) => {
         const currentShifts = getShifts(coord.staffId, coord.day);
@@ -642,32 +640,73 @@ const App: React.FC = () => {
                 blocks.push({ type: 'BD', shifts: prevAfternoon ? [prevAfternoon, shift] : [shift] });
             }
         });
-        return blocks;
+
+        // Simple deduplication based on shift IDs to avoid double counting
+        const uniqueBlocks: typeof blocks = [];
+        const seenIds = new Set<string>();
+        blocks.forEach(b => {
+            const ids = b.shifts.map(s => s.id).join(',');
+            if (!seenIds.has(ids)) {
+                seenIds.add(ids);
+                uniqueBlocks.push(b);
+            }
+        });
+        return uniqueBlocks;
     };
 
     const sourceBlocks = getShiftBlocks(source);
     const targetBlocks = getShiftBlocks(target);
 
-    // Filter Logic: Match types if possible, else swap all.
-    const sTypes = sourceBlocks.map(b => b.type);
-    const tTypes = targetBlocks.map(b => b.type);
-    
-    // Check if there is ANY overlap in types (e.g. Both have Morning, or Both have BD-Combo)
-    const commonTypes = sTypes.filter(t => tTypes.includes(t));
-    const hasIntersection = commonTypes.length > 0;
+    // Priority Helper: Morning > Combo (BD)
+    const getPriorityBlock = (blocks: typeof sourceBlocks) => {
+        const mBlock = blocks.find(b => b.type === 'M');
+        if (mBlock) return mBlock;
+        const bdBlock = blocks.find(b => b.type === 'BD');
+        if (bdBlock) return bdBlock;
+        return null;
+    };
 
+    const sBlock = getPriorityBlock(sourceBlocks);
+    
     let sShiftsToMove: ShiftAssignment[] = [];
     let tShiftsToMove: ShiftAssignment[] = [];
 
-    if (hasIntersection) {
-        // Smart Match: Swap only matching types.
-        const typesToSwap = new Set(commonTypes);
-        sourceBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => sShiftsToMove.push(...b.shifts));
-        targetBlocks.filter(b => typesToSwap.has(b.type)).forEach(b => tShiftsToMove.push(...b.shifts));
+    if (sBlock) {
+        // Source is not empty. Determine intent based on Source Priority.
+        
+        // Try to find matching type in Target (Smart Match)
+        const matchingTBlock = targetBlocks.find(b => b.type === sBlock.type);
+        
+        if (matchingTBlock) {
+            // Match Found: Swap Same Types
+            sShiftsToMove = sBlock.shifts;
+            tShiftsToMove = matchingTBlock.shifts;
+        } else {
+            // No Match: Freedom Swap (Swap Source Priority with Target Priority)
+            // This fixes the "Swap Twice" issue by specifically targeting the Priority Block
+            // instead of swapping *everything* (which might include unwanted leftover shifts).
+            sShiftsToMove = sBlock.shifts;
+            const tPriorityBlock = getPriorityBlock(targetBlocks);
+            if (tPriorityBlock) {
+                tShiftsToMove = tPriorityBlock.shifts;
+            } else {
+                // Target is empty
+                tShiftsToMove = [];
+            }
+        }
     } else {
-        // No match? Swap everything (Freedom Mode).
-        sourceBlocks.forEach(b => sShiftsToMove.push(...b.shifts));
-        targetBlocks.forEach(b => tShiftsToMove.push(...b.shifts));
+        // Source is empty.
+        // We act based on Target Priority (effectively moving Target to Source)
+        const tPriorityBlock = getPriorityBlock(targetBlocks);
+        if (tPriorityBlock) {
+            tShiftsToMove = tPriorityBlock.shifts;
+            sShiftsToMove = [];
+        } else {
+            // Both empty. Do nothing.
+            setIsSwapMode(false);
+            setSwapSource(null);
+            return;
+        }
     }
 
     // Logging Logic
@@ -693,7 +732,7 @@ const App: React.FC = () => {
         addHistoryLog(formatDateToISO(sourceDateObj), msg, 'SWAP');
     }
     
-    // NEW LOGIC: Date Shifting for Same-Staff Swap
+    // Logic: Date Shifting for Same-Staff Swap vs Responsibility Swap for Diff-Staff
     const isSameStaff = source.staffId === target.staffId;
     
     // Helper to safely parse YYYY-MM-DD to Local Date
