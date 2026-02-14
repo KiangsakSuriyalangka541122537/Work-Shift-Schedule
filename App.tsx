@@ -760,8 +760,9 @@ const App: React.FC = () => {
     
     const nextDate = new Date(targetDate);
     nextDate.setDate(targetDate.getDate() + 1);
+    const nextDateStr = formatDateToISO(nextDate);
     
-    // Helper to remove specific shift type from a day
+    // Helper to remove specific shift type from a day for specific staff
     const removeShiftType = (list: ShiftAssignment[], dStr: string, type: ShiftType) => {
         const toRemove = list.filter(a => a.date === dStr && a.staffId === staffId && a.shiftType === type);
         toRemove.forEach(a => deleteAssignmentFromDB(a.id));
@@ -793,8 +794,19 @@ const App: React.FC = () => {
 
     } else if (action === 'MORNING') {
         setAssignments(prev => {
-            // Remove existing Morning on this day (to toggle/reset)
-            let temp = removeShiftType(prev, targetDateStr, ShiftType.MORNING);
+            let temp = [...prev];
+
+            // 1. GLOBAL RULE: Only 1 Morning allowed per day across ALL staff.
+            // Find who currently has it and remove it.
+            const existingMorning = temp.filter(a => a.date === targetDateStr && a.shiftType === ShiftType.MORNING);
+            existingMorning.forEach(ex => {
+                 temp = temp.filter(a => a.id !== ex.id);
+                 deleteAssignmentFromDB(ex.id);
+            });
+
+            // 2. SELF CLEANUP: Remove conflicting types for THIS staff (e.g. Afternoon)
+            // Remove existing Morning on this day (already done above globally, but safe to keep)
+            // temp = removeShiftType(temp, targetDateStr, ShiftType.MORNING);
             
             // NOTE: We do NOT remove Night shifts here, allowing M and N to coexist.
             // But we DO remove Afternoon shifts (M and A usually conflict)
@@ -810,18 +822,41 @@ const App: React.FC = () => {
         });
     } else if (action === 'BD_COMBO') {
         setAssignments(prev => {
-            // Day 1: Afternoon
-            // Remove Morning? Yes. Remove existing Afternoon? Yes. Remove Night? No (allow A+N? Unlikely but safe to clear A)
-            // Sticking to standard: Clear Day 1 mostly.
-            let temp = removeShiftType(prev, targetDateStr, ShiftType.MORNING);
-            temp = removeShiftType(temp, targetDateStr, ShiftType.AFTERNOON);
-            // temp = removeShiftType(temp, targetDateStr, ShiftType.NIGHT); // Allow Night to stay if it's from yesterday? Yes.
+            let temp = [...prev];
+            
+            // 1. GLOBAL RULE: Only 1 Afternoon (Day 1) allowed across ALL staff.
+            // We must find who has it, remove it, AND remove their Night (Day 2) to avoid orphans.
+            const existingAfternoon = temp.find(a => a.date === targetDateStr && a.shiftType === ShiftType.AFTERNOON);
+            if (existingAfternoon) {
+                // Remove Afternoon
+                temp = temp.filter(a => a.id !== existingAfternoon.id);
+                deleteAssignmentFromDB(existingAfternoon.id);
 
+                // Remove Linked Night (Day 2) for that SAME staff
+                const linkedNight = temp.find(a => a.staffId === existingAfternoon.staffId && a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
+                if (linkedNight) {
+                    temp = temp.filter(a => a.id !== linkedNight.id);
+                    deleteAssignmentFromDB(linkedNight.id);
+                }
+            }
+
+            // 2. GLOBAL RULE: Only 1 Night (Day 2) allowed across ALL staff.
+            // (In case someone has Night but no Afternoon - unlikely but possible).
+            const existingNight = temp.find(a => a.date === nextDateStr && a.shiftType === ShiftType.NIGHT);
+            if (existingNight) {
+                 temp = temp.filter(a => a.id !== existingNight.id);
+                 deleteAssignmentFromDB(existingNight.id);
+            }
+
+            // 3. SELF CLEANUP (Standard Logic)
+            // Day 1: Afternoon
+            // Remove Morning? Yes. Remove existing Afternoon? Yes. 
+            temp = removeShiftType(temp, targetDateStr, ShiftType.MORNING);
+            temp = removeShiftType(temp, targetDateStr, ShiftType.AFTERNOON);
+            
             // Day 2: Night
-            const nextDateStr = formatDateToISO(nextDate);
             // Remove existing Night.
             temp = removeShiftType(temp, nextDateStr, ShiftType.NIGHT);
-            // DO NOT remove Morning on Day 2 (Allow N+M Coexistence)
 
             // Add new shifts
             temp = updateAssignmentsWithRule(temp, staffId, targetDate, ShiftType.AFTERNOON);
