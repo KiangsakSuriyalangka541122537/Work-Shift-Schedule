@@ -529,112 +529,145 @@ const App: React.FC = () => {
 
   // EXCEL Export
   const handleExportExcel = () => {
-    const daysHeader = daysArray.map(d => String(d));
-    const headerRow = ['ลำดับ', 'ชื่อ-สกุล', ...daysHeader, 'รวม', 'จำนวนเงิน'];
-
-    // Identify which dataset to use (Snapshot vs Current)
+    // 1. Setup Data & Variables
+    const thaiMonths = [
+        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+    ];
+    const monthName = thaiMonths[currentDate.getMonth()];
+    const buddhistYear = currentDate.getFullYear() + 543;
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    const daysHeader = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
+    
+    // Determine source assignments (Snapshot vs Current)
     const sourceAssignments = isPublished && originalAssignments.length > 0 ? originalAssignments : assignments;
 
+    // 2. Define Helper Functions (Logic from OfficialPrintView)
+    const getShiftCode = (staffId: string, day: number) => {
+        const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+        const dateStr = formatDateToISO(dateObj);
+        const shift = sourceAssignments.find(a => a.staffId === staffId && a.date === dateStr);
+        if (!shift) return "";
+        switch (shift.shiftType) {
+            case ShiftType.MORNING: return "ช";
+            case ShiftType.AFTERNOON: return "บ";
+            case ShiftType.NIGHT: return "ด";
+            default: return "";
+        }
+    };
+
+    const isOutgoingCrossMonthCombo = (staffId: string) => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const lastDayObj = new Date(year, month + 1, 0); 
+        const lastDayStr = formatDateToISO(lastDayObj);
+        const nextMonthFirstObj = new Date(year, month + 1, 1);
+        const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+        
+        const hasAfternoonLastDay = sourceAssignments.some(a => a.staffId === staffId && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON);
+        const hasNightNextDay = sourceAssignments.some(a => a.staffId === staffId && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+        return hasAfternoonLastDay && hasNightNextDay;
+    };
+
+    const isIncomingCrossMonthCombo = (staffId: string) => {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const prevMonthLastDayObj = new Date(year, month, 0); 
+        const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+        const currentMonthFirstObj = new Date(year, month, 1);
+        const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+
+        const hasAfternoonPrevLastDay = sourceAssignments.some(a => a.staffId === staffId && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON);
+        const hasNightFirstDay = sourceAssignments.some(a => a.staffId === staffId && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+        return hasAfternoonPrevLastDay && hasNightFirstDay;
+    };
+
+    const calculateShiftCount = (staffId: string) => {
+        let count = 0;
+        for(let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+            const dateStr = formatDateToISO(dateObj);
+            const shift = sourceAssignments.find(a => a.staffId === staffId && a.date === dateStr);
+            if (shift) {
+                if (shift.shiftType === ShiftType.MORNING) count += 1;
+                else if (shift.shiftType === ShiftType.AFTERNOON) count += 0.5;
+                else if (shift.shiftType === ShiftType.NIGHT) count += 0.5;
+            }
+        }
+        if (isOutgoingCrossMonthCombo(staffId)) count += 0.5;
+        if (isIncomingCrossMonthCombo(staffId)) count -= 0.5;
+        return count % 1 === 0 ? count : Number(count.toFixed(1));
+    };
+
+    const calculateAmount = (staffId: string) => {
+        let sum = 0;
+        for(let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+            const dateStr = formatDateToISO(dateObj);
+            const shift = sourceAssignments.find(a => a.staffId === staffId && a.date === dateStr);
+            if (shift) {
+                if (shift.shiftType === ShiftType.MORNING) sum += 750;
+                else if (shift.shiftType === ShiftType.AFTERNOON) sum += 375;
+                else if (shift.shiftType === ShiftType.NIGHT) sum += 375;
+            }
+        }
+        if (isOutgoingCrossMonthCombo(staffId)) sum += 375;
+        if (isIncomingCrossMonthCombo(staffId)) sum -= 375;
+        return sum;
+    };
+
+    // 3. Construct Excel Rows
+    // Row 1: Main Title
+    const titleRow = ["หลักฐานการขออนุมัติปฏิบัติงานนอกเวลาราชการ"];
+    // Row 2: Sub Title
+    const subTitleRow = [`ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน ${monthName} พ.ศ. ${buddhistYear} งานศูนย์คอมพิวเตอร์`];
+    // Row 3: Empty
+    const emptyRow = [];
+    // Row 4: Header
+    const headerRow = ['ลำดับ', 'ชื่อ-สกุล', ...daysHeader, 'จำนวนเวร', 'จำนวนเงิน'];
+
+    // Data Rows
     const dataRows = STAFF_LIST.map((staff, index) => {
-        const shiftCells = daysArray.map(day => {
-            const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-            const dateStr = formatDateToISO(date);
-            const shifts = sourceAssignments.filter(a => a.staffId === staff.id && a.date === dateStr);
-            
-            // Sort logic: M -> A -> N
-            const order = { [ShiftType.MORNING]: 1, [ShiftType.AFTERNOON]: 2, [ShiftType.NIGHT]: 3, [ShiftType.OFF]: 4 };
-            shifts.sort((a, b) => order[a.shiftType] - order[b.shiftType]);
-             
-            if (shifts.length === 0) return '';
-            return shifts.map(s => SHIFT_CONFIG[s.shiftType].code).join(',');
-        });
-
-        // Helper calculations local to export function using sourceAssignments
-        const calculateExportTotal = (sid: string) => {
-             let sum = 0;
-             const year = currentDate.getFullYear();
-             const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-             const prefix = `${year}-${month}-`;
-             
-             sourceAssignments.filter(a => a.staffId === sid && a.date.startsWith(prefix)).forEach(s => {
-                if (s.shiftType === ShiftType.MORNING) sum += 1;
-                else if (s.shiftType === ShiftType.AFTERNOON) sum += 0.5;
-                else if (s.shiftType === ShiftType.NIGHT) sum += 0.5;
-             });
-             
-             const lastDayObj = new Date(year, currentDate.getMonth() + 1, 0);
-             const lastDayStr = formatDateToISO(lastDayObj);
-             const nextMonthFirstObj = new Date(year, currentDate.getMonth() + 1, 1);
-             const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
-             const prevMonthLastDayObj = new Date(year, currentDate.getMonth(), 0);
-             const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
-             const currentMonthFirstObj = new Date(year, currentDate.getMonth(), 1);
-             const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
-
-             // Outgoing
-             const hasAfternoonLastDay = sourceAssignments.some(a => a.staffId === sid && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON);
-             const hasNightNextDay = sourceAssignments.some(a => a.staffId === sid && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT);
-             if (hasAfternoonLastDay && hasNightNextDay) sum += 0.5;
-             
-             // Incoming
-             const hasAfternoonPrevMonth = sourceAssignments.some(a => a.staffId === sid && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON);
-             const hasNightFirstDay = sourceAssignments.some(a => a.staffId === sid && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT);
-             if (hasAfternoonPrevMonth && hasNightFirstDay) sum -= 0.5;
-
-             return sum % 1 === 0 ? sum : Number(sum.toFixed(1));
-        };
-
-        const calculateExportAmount = (sid: string) => {
-             let sum = 0;
-             const year = currentDate.getFullYear();
-             const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-             const prefix = `${year}-${month}-`;
-             
-             sourceAssignments.filter(a => a.staffId === sid && a.date.startsWith(prefix)).forEach(s => {
-               if (s.shiftType === ShiftType.MORNING) sum += 750;
-               else if (s.shiftType === ShiftType.AFTERNOON) sum += 375;
-               else if (s.shiftType === ShiftType.NIGHT) sum += 375;
-             });
-
-             const lastDayObj = new Date(year, currentDate.getMonth() + 1, 0);
-             const lastDayStr = formatDateToISO(lastDayObj);
-             const nextMonthFirstObj = new Date(year, currentDate.getMonth() + 1, 1);
-             const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
-             const prevMonthLastDayObj = new Date(year, currentDate.getMonth(), 0);
-             const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
-             const currentMonthFirstObj = new Date(year, currentDate.getMonth(), 1);
-             const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
-             
-             const hasAfternoonLastDay = sourceAssignments.some(a => a.staffId === sid && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON);
-             const hasNightNextDay = sourceAssignments.some(a => a.staffId === sid && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT);
-             if (hasAfternoonLastDay && hasNightNextDay) sum += 375;
-             
-             const hasAfternoonPrevMonth = sourceAssignments.some(a => a.staffId === sid && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON);
-             const hasNightFirstDay = sourceAssignments.some(a => a.staffId === sid && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT);
-             if (hasAfternoonPrevMonth && hasNightFirstDay) sum -= 375;
-             
-             return sum;
-        };
-
+        const shiftCells = Array.from({ length: daysInMonth }, (_, i) => getShiftCode(staff.id, i + 1));
         return [
             index + 1,
             staff.name,
             ...shiftCells,
-            calculateExportTotal(staff.id),
-            calculateExportAmount(staff.id)
+            calculateShiftCount(staff.id),
+            calculateAmount(staff.id)
         ];
     });
 
-    const wsData = [headerRow, ...dataRows];
+    // 4. Create Workbook
+    const wb = XLSX.utils.book_new();
+    const wsData = [titleRow, subTitleRow, emptyRow, headerRow, ...dataRows];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    const wb = XLSX.utils.book_new();
+    // 5. Merge Cells for Titles
+    // Merge title across all columns (2 + daysInMonth + 2) = 4 + daysInMonth
+    const totalCols = 2 + daysInMonth + 2; 
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // Row 0 (Title)
+        { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } }, // Row 1 (Sub Title)
+    ];
+
+    // Optional: Set column widths for better readability
+    const wscols = [
+        { wch: 6 },  // No
+        { wch: 20 }, // Name
+        ...Array(daysInMonth).fill({ wch: 3 }), // Days
+        { wch: 10 }, // Count
+        { wch: 12 }  // Amount
+    ];
+    ws['!cols'] = wscols;
+
     XLSX.utils.book_append_sheet(wb, ws, "Roster");
     
-    const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
+    // 6. Save File
+    const monthStrEn = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
     const fileName = isPublished && originalAssignments.length > 0 
-        ? `duty_roster_${monthStr}_original.xlsx` 
-        : `duty_roster_${monthStr}.xlsx`;
+        ? `duty_roster_${monthStrEn}_original.xlsx` 
+        : `duty_roster_${monthStrEn}.xlsx`;
         
     XLSX.writeFile(wb, fileName);
   };
