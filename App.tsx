@@ -11,6 +11,7 @@ import { ShiftLogList } from './components/ShiftLogList';
 import { supabase } from './supabaseClient';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 
 const App: React.FC = () => {
   // Auth State
@@ -524,6 +525,118 @@ const App: React.FC = () => {
     }
   };
 
+  // EXCEL Export
+  const handleExportExcel = () => {
+    const daysHeader = daysArray.map(d => String(d));
+    const headerRow = ['ลำดับ', 'ชื่อ-สกุล', ...daysHeader, 'รวม', 'จำนวนเงิน'];
+
+    // Identify which dataset to use (Snapshot vs Current)
+    const sourceAssignments = isPublished && originalAssignments.length > 0 ? originalAssignments : assignments;
+
+    const dataRows = STAFF_LIST.map((staff, index) => {
+        const shiftCells = daysArray.map(day => {
+            const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            const dateStr = formatDateToISO(date);
+            const shifts = sourceAssignments.filter(a => a.staffId === staff.id && a.date === dateStr);
+            
+            // Sort logic: M -> A -> N
+            const order = { [ShiftType.MORNING]: 1, [ShiftType.AFTERNOON]: 2, [ShiftType.NIGHT]: 3, [ShiftType.OFF]: 4 };
+            shifts.sort((a, b) => order[a.shiftType] - order[b.shiftType]);
+             
+            if (shifts.length === 0) return '';
+            return shifts.map(s => SHIFT_CONFIG[s.shiftType].code).join(',');
+        });
+
+        // Helper calculations local to export function using sourceAssignments
+        const calculateExportTotal = (sid: string) => {
+             let sum = 0;
+             const year = currentDate.getFullYear();
+             const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+             const prefix = `${year}-${month}-`;
+             
+             sourceAssignments.filter(a => a.staffId === sid && a.date.startsWith(prefix)).forEach(s => {
+                if (s.shiftType === ShiftType.MORNING) sum += 1;
+                else if (s.shiftType === ShiftType.AFTERNOON) sum += 0.5;
+                else if (s.shiftType === ShiftType.NIGHT) sum += 0.5;
+             });
+             
+             const lastDayObj = new Date(year, currentDate.getMonth() + 1, 0);
+             const lastDayStr = formatDateToISO(lastDayObj);
+             const nextMonthFirstObj = new Date(year, currentDate.getMonth() + 1, 1);
+             const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+             const prevMonthLastDayObj = new Date(year, currentDate.getMonth(), 0);
+             const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+             const currentMonthFirstObj = new Date(year, currentDate.getMonth(), 1);
+             const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+
+             // Outgoing
+             const hasAfternoonLastDay = sourceAssignments.some(a => a.staffId === sid && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON);
+             const hasNightNextDay = sourceAssignments.some(a => a.staffId === sid && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+             if (hasAfternoonLastDay && hasNightNextDay) sum += 0.5;
+             
+             // Incoming
+             const hasAfternoonPrevMonth = sourceAssignments.some(a => a.staffId === sid && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON);
+             const hasNightFirstDay = sourceAssignments.some(a => a.staffId === sid && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+             if (hasAfternoonPrevMonth && hasNightFirstDay) sum -= 0.5;
+
+             return sum % 1 === 0 ? sum : Number(sum.toFixed(1));
+        };
+
+        const calculateExportAmount = (sid: string) => {
+             let sum = 0;
+             const year = currentDate.getFullYear();
+             const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+             const prefix = `${year}-${month}-`;
+             
+             sourceAssignments.filter(a => a.staffId === sid && a.date.startsWith(prefix)).forEach(s => {
+               if (s.shiftType === ShiftType.MORNING) sum += 750;
+               else if (s.shiftType === ShiftType.AFTERNOON) sum += 375;
+               else if (s.shiftType === ShiftType.NIGHT) sum += 375;
+             });
+
+             const lastDayObj = new Date(year, currentDate.getMonth() + 1, 0);
+             const lastDayStr = formatDateToISO(lastDayObj);
+             const nextMonthFirstObj = new Date(year, currentDate.getMonth() + 1, 1);
+             const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+             const prevMonthLastDayObj = new Date(year, currentDate.getMonth(), 0);
+             const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+             const currentMonthFirstObj = new Date(year, currentDate.getMonth(), 1);
+             const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+             
+             const hasAfternoonLastDay = sourceAssignments.some(a => a.staffId === sid && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON);
+             const hasNightNextDay = sourceAssignments.some(a => a.staffId === sid && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+             if (hasAfternoonLastDay && hasNightNextDay) sum += 375;
+             
+             const hasAfternoonPrevMonth = sourceAssignments.some(a => a.staffId === sid && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON);
+             const hasNightFirstDay = sourceAssignments.some(a => a.staffId === sid && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT);
+             if (hasAfternoonPrevMonth && hasNightFirstDay) sum -= 375;
+             
+             return sum;
+        };
+
+        return [
+            index + 1,
+            staff.name,
+            ...shiftCells,
+            calculateExportTotal(staff.id),
+            calculateExportAmount(staff.id)
+        ];
+    });
+
+    const wsData = [headerRow, ...dataRows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Roster");
+    
+    const monthStr = currentDate.toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' });
+    const fileName = isPublished && originalAssignments.length > 0 
+        ? `duty_roster_${monthStr}_original.xlsx` 
+        : `duty_roster_${monthStr}.xlsx`;
+        
+    XLSX.writeFile(wb, fileName);
+  };
+
   // Logic: Absolute Freedom Swap (Cross-Type Swap) with Relative Date Logic
   // 1. Identify "Dominant Package" at Source and Target (Morning, or Afternoon+Night, or Night+PrevAfternoon).
   // 2. Perform unconditional swap by calculating RELATIVE OFFSETS from the clicked date.
@@ -969,7 +1082,7 @@ const App: React.FC = () => {
         onClick={() => handleCellClick(staff.id, day)}
         className={`
           h-14 md:h-16 flex-1 min-w-[34px] md:min-w-[44px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden
-          ${isSpecial ? 'bg-slate-100/80' : ''}
+          ${isSpecial ? 'bg-slate-300' : ''}
           ${cursorClass}
           ${swapClass}
           ${todayClass}
@@ -1194,6 +1307,7 @@ const App: React.FC = () => {
                </div>
                
                {isKikOrAdmin && (
+               <>
                <button 
                   onClick={handleExportPDF}
                   disabled={isExporting}
@@ -1206,6 +1320,14 @@ const App: React.FC = () => {
                   )}
                   <span className="hidden sm:inline">Export PDF</span>
                </button>
+               <button 
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 md:gap-3 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm border border-transparent hover:border-emerald-200 rounded-xl transition-all font-semibold text-xs md:text-sm md:text-base shrink-0 whitespace-nowrap"
+               >
+                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-[18px] md:h-[18px]"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 11h8"/><path d="M8 15h8"/><path d="M8 7h8"/></svg>
+                   <span className="hidden sm:inline">Export Excel</span>
+               </button>
+               </>
                )}
 
                <button 
@@ -1276,7 +1398,7 @@ const App: React.FC = () => {
                               const showEmptyWarning = isKikOrAdmin && !hasWorkingShifts;
 
                               return (
-                                  <div key={day} className={`relative flex-1 min-w-[34px] md:min-w-[44px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-slate-200/70' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
+                                  <div key={day} className={`relative flex-1 min-w-[34px] md:min-w-[44px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-slate-300' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
                                       <div className={`text-sm md:text-base font-bold 
                                         ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} 
                                         ${!isCurrentDay && showEmptyWarning ? 'text-red-600 scale-110 font-extrabold' : ''}

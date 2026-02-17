@@ -206,7 +206,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     {daysArray.map(day => (
                         <th key={day} style={{
                             width: '23px', 
-                            backgroundColor: isWeekendOrHoliday(day) ? '#E5E7EB' : '#ffffff', // Gray 200 for holiday header
+                            backgroundColor: isWeekendOrHoliday(day) ? '#CBD5E1' : '#ffffff', // Slate 300 for holiday header
                             color: isWeekendOrHoliday(day) ? '#374151' : '#334155',
                             fontWeight: 'bold',
                             fontSize: '11px',
@@ -229,7 +229,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     {daysArray.map(day => (
                     <td key={day} style={{
                         fontWeight: 'bold', 
-                        backgroundColor: isWeekendOrHoliday(day) ? '#F3F4F6' : 'transparent', // Gray 100 for holiday cells
+                        backgroundColor: isWeekendOrHoliday(day) ? '#E2E8F0' : 'transparent', // Slate 200 for holiday cells
                         color: '#1e293b',
                         fontSize: '12px'
                     }}>

@@ -14,7 +14,8 @@
     "recharts": "^3.7.0",
     "@supabase/supabase-js": "2.39.7",
     "html2canvas": "1.4.1",
-    "jspdf": "2.5.1"
+    "jspdf": "2.5.1",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
