@@ -969,7 +969,7 @@ const App: React.FC = () => {
         onClick={() => handleCellClick(staff.id, day)}
         className={`
           h-14 md:h-16 flex-1 min-w-[34px] md:min-w-[44px] border-r border-b border-slate-200 flex flex-col transition-all relative overflow-hidden
-          ${shifts.length === 0 && isSpecial ? 'bg-rose-50/40' : ''}
+          ${isSpecial ? 'bg-slate-100/80' : ''}
           ${cursorClass}
           ${swapClass}
           ${todayClass}
@@ -1042,6 +1042,57 @@ const App: React.FC = () => {
 
     // Return integer if possible, else 1 decimal
     return sum % 1 === 0 ? sum : sum.toFixed(1);
+  };
+
+  const getStaffAmount = (staffId: string) => {
+    if (!shouldShowContent) return 0;
+    
+    let sum = 0;
+    
+    // 1. Base Sum from current month assignments
+    currentMonthAssignments.filter(a => a.staffId === staffId).forEach(s => {
+       if (s.shiftType === ShiftType.MORNING) sum += 750;
+       else if (s.shiftType === ShiftType.AFTERNOON) sum += 375;
+       else if (s.shiftType === ShiftType.NIGHT) sum += 375;
+    });
+
+    // 2. Cross-Month Logic (Same as OfficialPrintView)
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth(); 
+    
+    const lastDayObj = new Date(year, month + 1, 0);
+    const lastDayStr = formatDateToISO(lastDayObj);
+    const nextMonthFirstObj = new Date(year, month + 1, 1);
+    const nextMonthFirstStr = formatDateToISO(nextMonthFirstObj);
+    
+    const prevMonthLastDayObj = new Date(year, month, 0);
+    const prevMonthLastDayStr = formatDateToISO(prevMonthLastDayObj);
+    const currentMonthFirstObj = new Date(year, month, 1);
+    const currentMonthFirstStr = formatDateToISO(currentMonthFirstObj);
+
+    // Outgoing Combo: Afternoon (End of Month) -> Night (Start of Next) => +375
+    const hasAfternoonLastDay = assignments.some(a => 
+        a.staffId === staffId && a.date === lastDayStr && a.shiftType === ShiftType.AFTERNOON
+    );
+    const hasNightNextDay = assignments.some(a => 
+        a.staffId === staffId && a.date === nextMonthFirstStr && a.shiftType === ShiftType.NIGHT
+    );
+    if (hasAfternoonLastDay && hasNightNextDay) {
+        sum += 375;
+    }
+
+    // Incoming Combo: Afternoon (End of Prev) -> Night (Start of This) => -375
+    const hasAfternoonPrevMonth = assignments.some(a => 
+        a.staffId === staffId && a.date === prevMonthLastDayStr && a.shiftType === ShiftType.AFTERNOON
+    );
+    const hasNightFirstDay = assignments.some(a => 
+        a.staffId === staffId && a.date === currentMonthFirstStr && a.shiftType === ShiftType.NIGHT
+    );
+    if (hasAfternoonPrevMonth && hasNightFirstDay) {
+        sum -= 375;
+    }
+
+    return sum.toLocaleString();
   };
 
   return (
@@ -1225,16 +1276,16 @@ const App: React.FC = () => {
                               const showEmptyWarning = isKikOrAdmin && !hasWorkingShifts;
 
                               return (
-                                  <div key={day} className={`relative flex-1 min-w-[34px] md:min-w-[44px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-rose-50/50' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
+                                  <div key={day} className={`relative flex-1 min-w-[34px] md:min-w-[44px] flex flex-col items-center justify-center border-r border-b border-slate-200 py-2 ${showEmptyWarning ? 'bg-red-50 ring-1 ring-inset ring-red-200' : (isSpecial ? 'bg-slate-200/70' : '')} ${isCurrentDay ? 'bg-emerald-50 shadow-inner' : ''}`}>
                                       <div className={`text-sm md:text-base font-bold 
                                         ${isCurrentDay ? 'bg-emerald-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-sm -mt-1 mb-1' : ''} 
                                         ${!isCurrentDay && showEmptyWarning ? 'text-red-600 scale-110 font-extrabold' : ''}
-                                        ${!isCurrentDay && !showEmptyWarning && isSpecial ? 'text-rose-500' : ''} 
+                                        ${!isCurrentDay && !showEmptyWarning && isSpecial ? 'text-slate-600' : ''} 
                                         ${!isCurrentDay && !showEmptyWarning && !isSpecial ? 'text-slate-700' : ''}`}>
                                         {day}
                                       </div>
                                       <span className={`text-[9px] md:text-[10px] uppercase 
-                                        ${showEmptyWarning ? 'text-red-500 font-bold' : (isSpecial && !isCurrentDay ? 'text-rose-400' : 'text-slate-400')}`}>
+                                        ${showEmptyWarning ? 'text-red-500 font-bold' : (isSpecial && !isCurrentDay ? 'text-slate-500' : 'text-slate-400')}`}>
                                         {getDayLabel(day)}
                                       </span>
                                       
@@ -1248,6 +1299,9 @@ const App: React.FC = () => {
                               );
                           })}
                           <div className="w-14 min-w-[3.5rem] md:w-20 md:min-w-[5rem] px-1 md:px-2 py-2 md:py-4 text-center text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center">รวม</div>
+                          {isKikOrAdmin && (
+                              <div className="w-16 min-w-[4rem] md:w-24 md:min-w-[6rem] px-1 md:px-2 py-2 md:py-4 text-center text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200 flex items-center justify-center border-l border-slate-200">เงิน</div>
+                          )}
                       </div>
 
                       {STAFF_LIST.map((staff, index) => (
@@ -1261,6 +1315,9 @@ const App: React.FC = () => {
                               </div>
                               {daysArray.map(day => renderCell(staff, day))}
                               <div className="w-14 min-w-[3.5rem] md:w-20 md:min-w-[5rem] px-1 md:px-2 py-2 flex items-center justify-center text-sm md:text-lg font-bold text-slate-500 group-hover:text-slate-700 bg-transparent">{getStaffTotal(staff.id)}</div>
+                              {isKikOrAdmin && (
+                                <div className="w-16 min-w-[4rem] md:w-24 md:min-w-[6rem] px-1 md:px-2 py-2 flex items-center justify-center text-xs md:text-base font-bold text-emerald-600 bg-transparent border-l border-slate-100">{getStaffAmount(staff.id)}</div>
+                              )}
                           </div>
                       ))}
                       
