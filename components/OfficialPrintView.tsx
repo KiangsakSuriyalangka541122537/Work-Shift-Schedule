@@ -171,7 +171,8 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     const dateStr = formatDateToISO(date);
     const d = date.getDay();
     // Check specific holidays or weekends (Sunday=0, Saturday=6)
-    return d === 0 || d === 6 || holidays.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
+    // Fix: Strictly match dates to avoid cross-year holiday bugs
+    return d === 0 || d === 6 || holidays.includes(dateStr);
   };
 
   const PageLayout = ({ pageNumber }: { pageNumber: number }) => (

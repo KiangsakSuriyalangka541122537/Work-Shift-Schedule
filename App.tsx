@@ -345,7 +345,8 @@ const App: React.FC = () => {
     const dateStr = formatDateToISO(date);
     const d = date.getDay();
     const isWeekend = d === 0 || d === 6;
-    const isHoliday = HOLIDAYS.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
+    // Fix: Strictly match dates to avoid cross-year holiday bugs
+    const isHoliday = HOLIDAYS.includes(dateStr); 
     return isWeekend || isHoliday;
   };
 
@@ -353,7 +354,8 @@ const App: React.FC = () => {
     const dateStr = formatDateToISO(date);
     const d = date.getDay();
     const isWeekend = d === 0 || d === 6;
-    const isHoliday = HOLIDAYS.some(h => h === dateStr || dateStr.endsWith(h.substring(5)));
+    // Fix: Strictly match dates to avoid cross-year holiday bugs
+    const isHoliday = HOLIDAYS.includes(dateStr);
     return isWeekend || isHoliday;
   };
 
