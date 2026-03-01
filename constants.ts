@@ -4,12 +4,12 @@ import { Staff, ShiftAssignment, ShiftType } from './types';
 const getAvatar = (name: string) => `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
 
 export const STAFF_LIST: Staff[] = [
-  { id: '1', name: 'พี่ต่อ', role: '081-234-5678', avatarUrl: getAvatar('พี่ต่อ') },
-  { id: '2', name: 'พี่กิ๊ก', role: '089-876-5432', avatarUrl: getAvatar('พี่กิ๊ก') },
-  { id: '3', name: 'พี่จิ๋ม', role: '090-112-2334', avatarUrl: getAvatar('พี่จิ๋ม') },
-  { id: '4', name: 'น้องปาน', role: '086-555-4444', avatarUrl: getAvatar('น้องปาน') },
-  { id: '5', name: 'พี่ท๊อป', role: '092-333-2222', avatarUrl: getAvatar('พี่ท๊อป') },
-  { id: '6', name: 'พี่ทีม', role: '084-777-8888', avatarUrl: getAvatar('พี่ทีม') },
+  { id: '1', name: 'พี่ต่อ', role: '090-6907619', avatarUrl: getAvatar('พี่ต่อ') },
+  { id: '2', name: 'พี่กิ๊ก', role: '084-6208170', avatarUrl: getAvatar('พี่กิ๊ก') },
+  { id: '3', name: 'พี่จิ๋ม', role: '091-7076988', avatarUrl: getAvatar('พี่จิ๋ม') },
+  { id: '4', name: 'น้องปาน', role: '082-1735719', avatarUrl: getAvatar('น้องปาน') },
+  { id: '5', name: 'พี่ท๊อป', role: '088-5890610', avatarUrl: getAvatar('พี่ท๊อป') },
+  { id: '6', name: 'พี่ทีม', role: '094-6595616', avatarUrl: getAvatar('พี่ทีม') },
 ];
 
 // รายการวันหยุดราชการ/กระทรวงสาธารณสุข

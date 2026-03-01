@@ -175,6 +175,35 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
     return d === 0 || d === 6 || holidays.includes(dateStr);
   };
 
+  const numberToThaiText = (number: number): string => {
+    if (number === 0) return "ศูนย์บาทถ้วน";
+    const numbers = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+    const positions = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน", "ล้าน"];
+    
+    let numStr = Math.floor(number).toString();
+    let text = "";
+    
+    for (let i = 0; i < numStr.length; i++) {
+        let digit = parseInt(numStr.charAt(i));
+        let pos = numStr.length - 1 - i;
+        
+        if (digit !== 0) {
+            if (pos === 1 && digit === 1) {
+                // 10 -> สิบ
+            } else if (pos === 1 && digit === 2) {
+                text += "ยี่";
+            } else if (pos === 0 && digit === 1 && numStr.length > 1 && parseInt(numStr.charAt(numStr.length - 2)) !== 0) {
+                text += "เอ็ด";
+            } else {
+                text += numbers[digit];
+            }
+            text += positions[pos];
+        }
+    }
+    
+    return text + "บาทถ้วน";
+  };
+
   const PageLayout = ({ pageNumber }: { pageNumber: number }) => (
     <div className="print-page w-[297mm] h-[210mm] bg-white px-8 pt-16 pb-8 font-sans box-border relative text-slate-800">
       
@@ -185,7 +214,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
           เวรเช้า 08.00 – 16.00 น. &nbsp;|&nbsp; เวรบ่าย 16.00 – 24.00 น. &nbsp;|&nbsp; เวรดึก 24.00 – 08.00 น.
         </p>
         <p className="text-base font-bold text-slate-800">
-          ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน <span className="text-indigo-900">{monthName}</span> พ.ศ. {buddhistYear} งานศูนย์คอมพิวเตอร์
+          ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน <span className="text-indigo-900">{monthName}</span> พ.ศ. {buddhistYear} กลุ่มงานเทคโนโลยีสารสนเทศ และ กลุ่มงานสุขภาพดิจิทัล
         </p>
       </div>
 
@@ -199,7 +228,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     <th colSpan={daysInMonth} style={{padding: '2px'}}>วันที่ปฏิบัติงาน</th>
                     <th style={{width: '60px'}}>จำนวนเวร</th>
                     {/* Dynamic Last Column Header */}
-                    <th style={{width: '90px'}}>{pageNumber === 2 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
+                    <th style={{width: '90px'}}>{pageNumber === 3 ? "จำนวนเงิน" : "ลายเซ็น"}</th>
                 </tr>
                 <tr className="h-6">
                     <th className="bg-slate-50 border-t-0"></th>
@@ -243,7 +272,7 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                     </td>
                     {/* Dynamic Last Column Content */}
                     <td style={{fontWeight: 'bold', fontSize: '12px', color: '#1e293b'}}>
-                        {pageNumber === 2 ? calculateAmount(staff.id) : ""}
+                        {pageNumber === 3 ? calculateAmount(staff.id) : ""}
                     </td>
                 </tr>
                 ))}
@@ -253,10 +282,136 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
 
       {/* Footer */}
       <div className="mt-4 flex justify-end items-end text-slate-500 text-xs">
-         <div className="mt-1">หน้า {pageNumber} / 2</div>
+         <div className="mt-1">หน้า {pageNumber} / 3</div>
       </div>
     </div>
   );
+
+  const SummaryPageLayout = () => {
+    const totalAmount = staffList.reduce((sum, staff) => {
+      return sum + parseInt(calculateAmount(staff.id).replace(/,/g, ''));
+    }, 0);
+
+    return (
+    <div className="print-page w-[297mm] h-[210mm] bg-white px-8 pt-10 pb-8 font-sans box-border relative text-slate-800">
+      
+      {/* Header */}
+      <div className="text-center mb-4">
+        <h1 className="font-bold text-2xl mb-2 text-slate-900 leading-tight">หลักฐานการขออนุมัติปฏิบัติงานนอกเวลาราชการ</h1>
+        <p className="text-sm font-medium text-slate-600 mb-2">
+          เวรเช้า 08.00 – 16.00 น. &nbsp;|&nbsp; เวรบ่าย 16.00 – 24.00 น. &nbsp;|&nbsp; เวรดึก 24.00 – 08.00 น.
+        </p>
+        <p className="text-base font-bold text-slate-800">
+          ส่วนราชการ โรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช ประจำเดือน <span className="text-indigo-900">{monthName}</span> พ.ศ. {buddhistYear} กลุ่มงานเทคโนโลยีสารสนเทศ และ กลุ่มงานสุขภาพดิจิทัล
+        </p>
+      </div>
+
+      {/* Table Container */}
+      <div className="w-full">
+        <table className="print-table w-full">
+            <thead>
+                <tr className="h-10">
+                    <th style={{width: '30px'}}>ลำดับ<br/>ที่</th>
+                    <th style={{width: '120px'}}>ชื่อ – สกุล</th>
+                    <th style={{width: '100px'}}>ตำแหน่ง</th>
+                    <th style={{width: '50px'}}>อัตราเงิน<br/>ตอบแทน</th>
+                    <th colSpan={daysInMonth} style={{padding: '2px'}}>วันที่ขึ้นปฏิบัติงาน</th>
+                    <th style={{width: '40px'}}>จำนวน<br/>เวร</th>
+                    <th style={{width: '60px'}}>จำนวนเงิน</th>
+                </tr>
+                <tr className="h-6">
+                    <th className="bg-slate-50 border-t-0"></th>
+                    <th className="bg-slate-50 border-t-0"></th>
+                    <th className="bg-slate-50 border-t-0"></th>
+                    <th className="bg-slate-50 border-t-0"></th>
+                    {daysArray.map(day => (
+                        <th key={day} style={{
+                            width: '18px', 
+                            backgroundColor: isWeekendOrHoliday(day) ? '#CBD5E1' : '#ffffff',
+                            color: isWeekendOrHoliday(day) ? '#374151' : '#334155',
+                            fontWeight: 'bold',
+                            fontSize: '10px',
+                            borderBottom: '1px solid #cbd5e1'
+                        }}>
+                        {day}
+                        </th>
+                    ))}
+                    <th className="bg-slate-50 border-t-0"></th>
+                    <th className="bg-slate-50 border-t-0"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {staffList.map((staff, index) => (
+                <tr key={staff.id}>
+                    <td className="text-slate-600 font-medium">{index + 1}</td>
+                    <td style={{textAlign: 'left', paddingLeft: '4px', fontWeight: '600', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden'}} className="text-slate-800">
+                        {staff.name}
+                    </td>
+                    <td style={{textAlign: 'left', paddingLeft: '4px', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden'}} className="text-slate-800">
+                        {staff.role}
+                    </td>
+                    <td style={{fontSize: '11px'}} className="text-slate-800">
+                        750
+                    </td>
+                    {daysArray.map(day => (
+                    <td key={day} style={{
+                        fontWeight: 'bold', 
+                        backgroundColor: isWeekendOrHoliday(day) ? '#E2E8F0' : 'transparent',
+                        color: '#1e293b',
+                        fontSize: '10px'
+                    }}>
+                        {getShiftCode(staff.id, day)}
+                    </td>
+                    ))}
+                    <td style={{fontWeight: 'bold', fontSize: '11px', color: '#1e293b'}}>
+                        {calculateShiftCount(staff.id)}
+                    </td>
+                    <td style={{fontWeight: 'bold', fontSize: '11px', color: '#1e293b'}}>
+                        {calculateAmount(staff.id)}
+                    </td>
+                </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-4 flex justify-between items-end text-slate-800 text-sm font-bold">
+         <div>หมายเหตุ : เวรบ่ายและดึก รวมกัน 750 บาท</div>
+         <div className="flex gap-4">
+            <span>รวมการจ่ายเงินทั้งสิ้น (ตัวอักษร)</span>
+            <span>( {numberToThaiText(totalAmount)} )</span>
+         </div>
+      </div>
+
+      {/* Signatures */}
+      <div className="mt-8 flex justify-between px-10">
+        <div className="text-center text-sm">
+            <p className="mb-8">เรียนผู้อำนวยการโรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช</p>
+            <p className="mb-2">ลงชื่อ.......................................................</p>
+            <p>(นายกิตติพงษ์ ชัยศรี)</p>
+            <p>นักวิชาการคอมพิวเตอร์ชำนาญการ</p>
+        </div>
+        <div className="text-center text-sm">
+            <p className="mb-8">เรียนผู้อำนวยการโรงพยาบาลสมเด็จพระเจ้าตากสินมหาราช</p>
+            <p className="mb-2">ลงชื่อ.......................................................</p>
+            <p>(นายสมิทธ์ เกิดสินธุ์)</p>
+            <p>นายแพทย์เชี่ยวชาญ</p>
+            <p>หัวหน้ากลุ่มภารกิจสุขภาพดิจิทัล</p>
+        </div>
+        <div className="text-center text-sm">
+            <p className="mb-8">คำสั่งผู้อำนวยการ</p>
+            <p className="mb-2">ลงชื่อ.......................................................</p>
+            <p>(นายสมิทธ์ เกิดสินธุ์)</p>
+            <p>นายแพทย์เชี่ยวชาญ</p>
+        </div>
+      </div>
+
+      <div className="absolute bottom-4 right-8 text-slate-500 text-xs">
+         หน้า 1 / 3
+      </div>
+    </div>
+  )};
 
   return (
     <div>
@@ -287,14 +442,19 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         }
       `}</style>
       
-      {/* Render Page 1 (Signatures) */}
-      <PageLayout pageNumber={1} />
+      {/* Render Page 1 (Summary) */}
+      <SummaryPageLayout />
+      
+      <div className="h-4 bg-gray-200 w-full print:hidden"></div>
+
+      {/* Render Page 2 (Signatures) */}
+      <PageLayout pageNumber={2} />
       
       {/* Spacer for on-screen view separation, hidden in print usually if processed page by page */}
       <div className="h-4 bg-gray-200 w-full print:hidden"></div>
 
-      {/* Render Page 2 (Amounts) */}
-      <PageLayout pageNumber={2} />
+      {/* Render Page 3 (Amounts) */}
+      <PageLayout pageNumber={3} />
     </div>
   );
 };

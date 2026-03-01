@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { getUsers, addUser, updateUser, deleteUser } from '../services/api';
 
 interface AdminManagerModalProps {
   isOpen: boolean;
@@ -30,16 +30,8 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({ isOpen, on
   const fetchUsers = async () => {
     setLoadingList(true);
     try {
-      const { data, error } = await supabase
-        .from('users-table-kik')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error) throw error;
-      
-      if (data) {
-        setUserList(data);
-      }
+      const data = await getUsers();
+      setUserList(data);
     } catch (err) {
       console.error("Error fetching users:", err);
     } finally {
@@ -76,26 +68,12 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({ isOpen, on
 
       if (editingId) {
         // Update existing user
-        const { error } = await supabase
-            .from('users-table-kik')
-            .update({ username, password, name })
-            .eq('id', editingId);
-
-        if (error) throw error;
+        await updateUser(editingId, { username, password, name });
         setMessage({ type: 'success', text: 'อัปเดตข้อมูลเรียบร้อยแล้ว' });
 
       } else {
         // Insert new user
-        const { error } = await supabase
-            .from('users-table-kik')
-            .insert([{ username, password, name }]);
-
-        if (error) {
-            if (error.code === '23505') { // Unique violation
-                throw new Error('ชื่อผู้ใช้งานนี้มีอยู่ในระบบแล้ว');
-            }
-            throw error;
-        }
+        await addUser({ username, password, name });
         setMessage({ type: 'success', text: 'เพิ่มผู้ดูแลเรียบร้อยแล้ว' });
       }
 
@@ -129,16 +107,9 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({ isOpen, on
       if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบผู้ใช้งานนี้?')) return;
 
       try {
-          const { error } = await supabase
-            .from('users-table-kik')
-            .delete()
-            .eq('id', id);
-
-          if (error) throw error;
-          
+          await deleteUser(id);
           fetchUsers();
           if (editingId === id) resetForm(); // Reset form if deleting the currently edited user
-
       } catch (err: any) {
           alert('เกิดข้อผิดพลาดในการลบ: ' + err.message);
       }
