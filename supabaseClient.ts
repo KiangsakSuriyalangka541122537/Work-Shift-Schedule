@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // การตั้งค่า Supabase โปรเจกต์ใหม่
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''; 
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = 'https://okeyxsiqxuzimyfwojlu.supabase.co'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rZXl4c2lxeHV6aW15Zndvamx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3NDE4OTQsImV4cCI6MjA4NTMxNzg5NH0.NVpRclwEWDkYLo_WwgYSGcTHrIAyh1JCCreIiMT5z6Y';
 
 // ใช้ Schema 'public' (ค่าเริ่มต้น) เพื่อแก้ปัญหา Invalid schema: Work-Shift-Schedule
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
