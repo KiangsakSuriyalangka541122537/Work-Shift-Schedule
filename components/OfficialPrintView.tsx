@@ -311,19 +311,15 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
         <table className="print-table w-full">
             <thead>
                 <tr className="h-10">
-                    <th style={{width: '30px'}}>ลำดับ<br/>ที่</th>
-                    <th style={{width: '120px'}}>ชื่อ – สกุล</th>
-                    <th style={{width: '100px'}}>ตำแหน่ง</th>
-                    <th style={{width: '50px'}}>อัตราเงิน<br/>ตอบแทน</th>
+                    <th rowSpan={2} style={{width: '30px'}}>ลำดับ<br/>ที่</th>
+                    <th rowSpan={2} style={{width: '120px'}}>ชื่อ – สกุล</th>
+                    <th rowSpan={2} style={{width: '100px'}}>ตำแหน่ง</th>
+                    <th rowSpan={2} style={{width: '50px'}}>อัตราเงิน<br/>ตอบแทน</th>
                     <th colSpan={daysInMonth} style={{padding: '2px'}}>วันที่ขึ้นปฏิบัติงาน</th>
-                    <th style={{width: '40px'}}>จำนวน<br/>เวร</th>
-                    <th style={{width: '60px'}}>จำนวนเงิน</th>
+                    <th rowSpan={2} style={{width: '40px'}}>จำนวน<br/>เวร</th>
+                    <th rowSpan={2} style={{width: '60px'}}>จำนวนเงิน</th>
                 </tr>
                 <tr className="h-6">
-                    <th className="bg-slate-50 border-t-0"></th>
-                    <th className="bg-slate-50 border-t-0"></th>
-                    <th className="bg-slate-50 border-t-0"></th>
-                    <th className="bg-slate-50 border-t-0"></th>
                     {daysArray.map(day => (
                         <th key={day} style={{
                             width: '18px', 
@@ -336,8 +332,6 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                         {day}
                         </th>
                     ))}
-                    <th className="bg-slate-50 border-t-0"></th>
-                    <th className="bg-slate-50 border-t-0"></th>
                 </tr>
             </thead>
             <tbody>
